@@ -1,0 +1,12 @@
+{
+  "name": "agentic-ai-worker",
+  "owner": { "name": "Filip Bogunia" },
+  "description": "Personal marketplace for the aw (agentic worker) plugin.",
+  "plugins": [
+    {
+      "name": "aw",
+      "source": "./plugins/aw",
+      "description": "Scrum-master orchestrated coder/tester/reviewer pipeline with typed task state."
+    }
+  ]
+}
