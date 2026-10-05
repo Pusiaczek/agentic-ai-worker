@@ -12,6 +12,9 @@ Source of the `aw` Claude Code plugin and its local marketplace. The user (Polis
   - `templates/code-standards.md` — default code standards the CLI injects into every coder/tester/reviewer briefing (repos add their own in `.claude/aw/code-standards.md`).
 - `.claude-plugin/marketplace.json` — local marketplace pointing at `./plugins/aw`.
 - `test/` — vitest; drives the CLI in-process via `run()` against temp projects (`test/helpers.ts`).
+- `docs/` — design documents (Polish). `docs/test-infra.md` is the contract and plan for the test server and per-lane Postgres (stage 2, milestones M0–M3).
+- `proto/` — throwaway prototypes run with plain `node` (not bundled, not type-checked, no test files), e.g. `proto/m0-vitest/m0.mjs`.
+- `fixtures/` — sample projects for the test infrastructure (see `fixtures/README.md`), e.g. `fixtures/test-aw`: a frozen copy of the pilot with the users tests split per endpoint and a test database chosen by the vitest mode (`npm run test:pg` = `vitest run --mode postgres`, mapped in its `vitest.config.ts`); `.env.test` holds only the Postgres URL. Each has its own `node_modules` (`npm ci`); `vitest.config.ts` keeps the CLI's own tests to `test/**`.
 
 ## Open work
 `TODO.md` (Polish) lists planned changes with the reason behind each. Check it before starting work on the plugin, and move items to "Zrobione" when done.

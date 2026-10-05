@@ -1,0 +1,25 @@
+# Optional Postgres for the postgres test modes (npm run test:pg, see .env.test.example). Data
+# lives in RAM and durability is off: fast, and gone when the container stops. Port 5433, so it
+# can run next to a local Postgres.
+services:
+  postgres-test:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5433:5432'
+    # The whole data root in RAM: PGDATA is /var/lib/postgresql/18/docker in the 18 images
+    # (/var/lib/postgresql/data before 18).
+    tmpfs:
+      - /var/lib/postgresql
+    command: >
+      postgres
+      -c fsync=off
+      -c synchronous_commit=off
+      -c full_page_writes=off
+      -c max_connections=200
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 1s
+      timeout: 3s
+      retries: 30
