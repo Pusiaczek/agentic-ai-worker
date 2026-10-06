@@ -4,9 +4,9 @@ Source of the `aw` Claude Code plugin and its local marketplace. The user (Polis
 
 ## Layout
 - `src/` — the `aw` CLI (TypeScript, zod). Entry `src/cli.ts` → `run()` in `src/main.ts`.
-  - `schema/` — single source of truth: statuses + transitions (`status.ts`), agent/orchestrator inputs (`outputs.ts`), task state (`state.ts`), repo config (`config.ts`), examples printed by `aw schema` (`examples.ts`).
-  - `core/` — state store (atomic write + lock + sha256 seal), state machine helpers, semantic validation, gates, briefing, `aw sm next`, report rendering.
-  - `commands/` — `sm` (orchestrator), role commands (`start`/`submit`/`fail`), info, init, hook entry.
+  - `schema/` — single source of truth: statuses + transitions (`status.ts`), agent/orchestrator inputs (`outputs.ts`), task state (`state.ts`), refinement state (`refinement.ts`), repo config (`config.ts`), examples printed by `aw schema` (`examples.ts`).
+  - `core/` — sealed JSON files (`sealed.ts`: atomic write + lock + sha256 seal), task state store, state machine helpers, semantic validation, gates, briefing, `aw sm next`, report rendering. `refinement*.ts` — the same pieces for refinements.
+  - `commands/` — `sm` (orchestrator), role commands (`start`/`submit`/`fail`), `refine` (splitting a slice into tasks), info, init, hook entry.
   - `hooks/` — PreToolUse guards, subagent lifecycle, shell parsing.
 - `plugins/aw/` — the plugin: `agents/`, `skills/`, `hooks/hooks.json`, `bin/` launchers, `templates/`, and `cli/aw.mjs` (GENERATED bundle — never edit by hand).
   - `templates/code-standards.md` — default code standards the CLI injects into every coder/tester/reviewer briefing (repos add their own in `.claude/aw/code-standards.md`).

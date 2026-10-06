@@ -250,6 +250,54 @@ export const RetroInput = z
   .strict();
 export type RetroInput = z.infer<typeof RetroInput>;
 
+// ---------------------------------------------------------------- product owner (refinement)
+
+/** 1-based position of an item in the proposal's `items` list. */
+const ItemPosition = z.number().int().min(1);
+
+export const RefineItemInput = z
+  .object({
+    title: Text.max(80).describe("Short: what works after this item."),
+    goal: Text.describe("Observable result for the user or the system, 1–3 sentences."),
+    scope: z.array(Text).min(1).describe("What this item includes."),
+    acceptanceCriteria: z
+      .array(Text)
+      .min(1)
+      .describe("Draft criteria; the scrum-master refines them when the task is planned."),
+    dependsOn: z.array(ItemPosition).default([]).describe("1-based positions of EARLIER items this one needs."),
+    suggestedMode: Mode,
+    modeReason: Text,
+    touches: z.array(Text).default([]).describe("Modules, files or areas likely affected (from reading the repo)."),
+    risks: z.array(Text).default([]),
+    prerequisiteFor: Text.optional().describe(
+      "Only for a technical step no requirement asks for directly (e.g. adding a test database or a library): why the later items need it. A later item must list this one in dependsOn.",
+    ),
+  })
+  .strict();
+export type RefineItemInput = z.infer<typeof RefineItemInput>;
+
+export const RefineOutput = z
+  .object({
+    summary: Text.max(4000).describe("How you understood the slice and why you split it this way."),
+    items: z.array(RefineItemInput).min(1).describe("In delivery order. The CLI numbers them I-1, I-2, …"),
+    coverage: z
+      .array(
+        z
+          .object({
+            requirement: Text.describe("A requirement from the slice text, quoted or closely paraphrased."),
+            items: z.array(ItemPosition).min(1).describe("1-based positions of the items that deliver it."),
+          })
+          .strict(),
+      )
+      .min(1),
+    outOfScope: z.array(Text).default([]).describe("Parts of the slice text no item covers, and why."),
+    openQuestions: z.array(Text).default([]),
+    addressedNotes: z.array(z.object({ noteId: NoteId, note: Text }).strict()).default([]),
+    processNotes: z.array(Text).default([]),
+  })
+  .strict();
+export type RefineOutput = z.infer<typeof RefineOutput>;
+
 export const INPUT_SCHEMAS = {
   tester: TesterOutput,
   reviewer: ReviewerOutput,
@@ -257,5 +305,6 @@ export const INPUT_SCHEMAS = {
   plan: PlanInput,
   docs: DocsCheckInput,
   retro: RetroInput,
+  refine: RefineOutput,
 } as const;
 export type InputSchemaName = keyof typeof INPUT_SCHEMAS;

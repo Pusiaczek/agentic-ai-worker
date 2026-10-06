@@ -291,8 +291,8 @@ var require_utils = __commonJS({
       }
       return output2;
     };
-    exports.basename = (path16, { windows } = {}) => {
-      const segs = path16.split(windows ? /[\\/]/ : "/");
+    exports.basename = (path19, { windows } = {}) => {
+      const segs = path19.split(windows ? /[\\/]/ : "/");
       const last = segs[segs.length - 1];
       if (last === "") {
         return segs[segs.length - 2];
@@ -1813,7 +1813,7 @@ var require_picomatch2 = __commonJS({
 });
 
 // src/cli.ts
-import * as fs13 from "node:fs";
+import * as fs16 from "node:fs";
 
 // src/core/project.ts
 import * as fs2 from "node:fs";
@@ -2635,10 +2635,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path16) {
-  if (!path16)
+function getElementAtPath(obj, path19) {
+  if (!path19)
     return obj;
-  return path16.reduce((acc, key) => acc?.[key], obj);
+  return path19.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -2978,11 +2978,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path16, issues) {
+function prefixIssues(path19, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path16);
+    iss.path.unshift(path19);
     return iss;
   });
 }
@@ -3432,16 +3432,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path16 = []) => {
+  const processError = (error63, path19 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path16, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path19, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path16, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path19, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path16, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path19, ...issue2.path]);
       } else {
-        const fullpath = [...path16, ...issue2.path];
+        const fullpath = [...path19, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -3480,17 +3480,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path16 = []) => {
+  const processError = (error63, path19 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path16, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path19, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path16, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path19, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path16, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path19, ...issue2.path]);
       } else {
-        const fullpath = [...path16, ...issue2.path];
+        const fullpath = [...path19, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -3529,8 +3529,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path16 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path16) {
+  const path19 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path19) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -6845,7 +6845,7 @@ var recursive = /* @__PURE__ */ new WeakMap();
 var NONE = 0;
 var ASSUMED = 1;
 var PROVEN = 2;
-function isRecursive(inst, stack, resolve8) {
+function isRecursive(inst, stack, resolve9) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE;
@@ -6855,7 +6855,7 @@ function isRecursive(inst, stack, resolve8) {
   let result = NONE;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve8);
+      const answer = isRecursive(child, stack, resolve9);
       if (answer > result)
         result = answer;
     }
@@ -6866,7 +6866,7 @@ function isRecursive(inst, stack, resolve8) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve8) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve9) : NONE;
       if (child > answer)
         answer = child;
     }
@@ -6930,7 +6930,7 @@ function isRecursive(inst, stack, resolve8) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve8 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve9 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -20632,13 +20632,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path16 = ref.slice(1).split("/").filter(Boolean);
-  if (path16.length === 0) {
+  const path19 = ref.slice(1).split("/").filter(Boolean);
+  if (path19.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path16[0] === defsKey) {
-    const key = path16[1] === void 0 ? void 0 : decodeJSONPointerSegment(path16[1]);
+  if (path19[0] === defsKey) {
+    const key = path19[1] === void 0 ? void 0 : decodeJSONPointerSegment(path19[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -21670,6 +21670,10 @@ var Config = external_exports.object({
     finalMessageMaxChars: external_exports.number().int().positive().default(600),
     stopBlocks: external_exports.number().int().nonnegative().default(2)
   }).strict().prefault({}),
+  refine: external_exports.object({
+    maxCriteriaPerItem: external_exports.number().int().positive().default(8).describe("Most acceptance criteria one item of a refinement may have; a bigger item must be split."),
+    maxItems: external_exports.number().int().positive().default(15).describe("Most items one refinement may have; a bigger slice must be split.")
+  }).strict().prefault({}),
   agents: external_exports.object({
     coder: agentPolicy("always", ["*"]),
     tester: agentPolicy("on-dispute", ["*"]),
@@ -21977,13 +21981,43 @@ var RetroInput = external_exports.object({
   processImprovements: external_exports.array(Text).default([]),
   notes: external_exports.string().optional()
 }).strict();
+var ItemPosition = external_exports.number().int().min(1);
+var RefineItemInput = external_exports.object({
+  title: Text.max(80).describe("Short: what works after this item."),
+  goal: Text.describe("Observable result for the user or the system, 1\u20133 sentences."),
+  scope: external_exports.array(Text).min(1).describe("What this item includes."),
+  acceptanceCriteria: external_exports.array(Text).min(1).describe("Draft criteria; the scrum-master refines them when the task is planned."),
+  dependsOn: external_exports.array(ItemPosition).default([]).describe("1-based positions of EARLIER items this one needs."),
+  suggestedMode: Mode,
+  modeReason: Text,
+  touches: external_exports.array(Text).default([]).describe("Modules, files or areas likely affected (from reading the repo)."),
+  risks: external_exports.array(Text).default([]),
+  prerequisiteFor: Text.optional().describe(
+    "Only for a technical step no requirement asks for directly (e.g. adding a test database or a library): why the later items need it. A later item must list this one in dependsOn."
+  )
+}).strict();
+var RefineOutput = external_exports.object({
+  summary: Text.max(4e3).describe("How you understood the slice and why you split it this way."),
+  items: external_exports.array(RefineItemInput).min(1).describe("In delivery order. The CLI numbers them I-1, I-2, \u2026"),
+  coverage: external_exports.array(
+    external_exports.object({
+      requirement: Text.describe("A requirement from the slice text, quoted or closely paraphrased."),
+      items: external_exports.array(ItemPosition).min(1).describe("1-based positions of the items that deliver it.")
+    }).strict()
+  ).min(1),
+  outOfScope: external_exports.array(Text).default([]).describe("Parts of the slice text no item covers, and why."),
+  openQuestions: external_exports.array(Text).default([]),
+  addressedNotes: external_exports.array(external_exports.object({ noteId: NoteId, note: Text }).strict()).default([]),
+  processNotes: external_exports.array(Text).default([])
+}).strict();
 var INPUT_SCHEMAS = {
   tester: TesterOutput,
   reviewer: ReviewerOutput,
   coder: CoderOutput,
   plan: PlanInput,
   docs: DocsCheckInput,
-  retro: RetroInput
+  retro: RetroInput,
+  refine: RefineOutput
 };
 
 // src/core/machine.ts
@@ -22063,8 +22097,8 @@ function describeFinding(f) {
   return `${f.id} [${f.severity}/${f.category}] ${where} \u2014 ${f.message}${f.suggestion ? ` (suggestion: ${f.suggestion})` : ""}`;
 }
 
-// src/core/store.ts
-import * as fs3 from "node:fs";
+// src/core/refinementStore.ts
+import * as fs4 from "node:fs";
 import * as path3 from "node:path";
 
 // src/schema/state.ts
@@ -22206,24 +22240,243 @@ var Backlog = external_exports.object({
   items: external_exports.array(BacklogItem)
 });
 
-// src/core/store.ts
-var STATE_FILE = "state.json";
-var HASH_FILE = "state.sha256";
-var LOCK_FILE = "state.lock";
-var STALE_LOCK_MS = 6e4;
-var taskPaths = (ref) => ({
-  state: path3.join(ref.dir, STATE_FILE),
-  hash: path3.join(ref.dir, HASH_FILE),
-  requirements: path3.join(ref.dir, "requirements.md"),
-  plan: path3.join(ref.dir, "plan.md"),
-  report: path3.join(ref.dir, "report.md"),
-  out: path3.join(ref.dir, "out"),
-  logs: path3.join(ref.dir, "logs"),
-  protected: path3.join(ref.dir, "protected")
+// src/schema/refinement.ts
+var Iso2 = external_exports.string().min(1);
+var RefinementId = TaskId;
+var RefinementStatus = external_exports.enum(["DRAFT", "WORKING", "PROPOSED", "APPROVED", "CANCELLED"]);
+var FINAL_REFINEMENT_STATUSES = ["APPROVED", "CANCELLED"];
+var ItemId = external_exports.string().regex(/^I-\d+$/);
+var RefinementItem = external_exports.object({
+  id: ItemId,
+  position: external_exports.number().int().min(1),
+  title: external_exports.string(),
+  goal: external_exports.string(),
+  scope: external_exports.array(external_exports.string()),
+  acceptanceCriteria: external_exports.array(external_exports.string()),
+  dependsOn: external_exports.array(ItemId),
+  suggestedMode: Mode,
+  modeReason: external_exports.string(),
+  touches: external_exports.array(external_exports.string()),
+  risks: external_exports.array(external_exports.string()),
+  prerequisiteFor: external_exports.string().optional()
 });
+var RefinementRevision = external_exports.object({
+  revision: external_exports.number().int().min(1),
+  runId: RunId,
+  at: Iso2,
+  summary: external_exports.string(),
+  items: external_exports.array(RefinementItem),
+  coverage: external_exports.array(external_exports.object({ requirement: external_exports.string(), items: external_exports.array(ItemId) })),
+  outOfScope: external_exports.array(external_exports.string()),
+  openQuestions: external_exports.array(external_exports.string()),
+  processNotes: external_exports.array(external_exports.string()),
+  addressedNotes: external_exports.array(external_exports.object({ noteId: NoteId, note: external_exports.string() }))
+});
+var RefinementRun = external_exports.object({
+  id: RunId,
+  state: external_exports.enum(["active", "submitted", "abandoned"]),
+  startedAt: Iso2,
+  finishedAt: Iso2.optional(),
+  agentId: external_exports.string().optional(),
+  transcriptPath: external_exports.string().optional(),
+  /** Notes this run must answer in addressedNotes, assigned when the run starts. */
+  consumedNotes: external_exports.array(NoteId),
+  stopBlocks: external_exports.number().int(),
+  stoppedWithoutSubmit: external_exports.boolean().optional(),
+  abandonReason: external_exports.string().optional()
+});
+var RefinementNote = external_exports.object({
+  id: NoteId,
+  text: external_exports.string(),
+  at: Iso2,
+  consumedByRun: RunId.optional()
+});
+var RefinementActor = external_exports.enum(["user", "scrum-master", "product-owner", "hook"]);
+var RefinementEvent = external_exports.object({
+  at: Iso2,
+  by: RefinementActor,
+  event: external_exports.string(),
+  note: external_exports.string().optional()
+});
+var RefinementState = external_exports.object({
+  schemaVersion: external_exports.literal(1),
+  id: RefinementId,
+  title: external_exports.string().min(1),
+  source: external_exports.object({ kind: external_exports.enum(["manual", "file"]), ref: external_exports.string().optional() }),
+  status: RefinementStatus,
+  createdAt: Iso2,
+  updatedAt: Iso2,
+  runs: external_exports.array(RefinementRun),
+  revisions: external_exports.array(RefinementRevision),
+  notes: external_exports.array(RefinementNote),
+  approvedRevision: external_exports.number().int().min(1).optional(),
+  history: external_exports.array(RefinementEvent),
+  counters: external_exports.object({ run: external_exports.number().int(), note: external_exports.number().int() })
+});
+
+// src/core/sealed.ts
+import * as fs3 from "node:fs";
+var STALE_LOCK_MS = 6e4;
+function parseSealedText(schema, fileName, text, label) {
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch (e) {
+    throw new AwError(`${label}: ${fileName} is not valid JSON: ${e.message}`, EXIT.TAMPERED);
+  }
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    const lines = formatIssues(parsed.error).map((line) => `  - ${line}`);
+    throw new AwError(`${label}: ${fileName} does not match the schema:
+${lines.join("\n")}`, EXIT.TAMPERED);
+  }
+  return parsed.data;
+}
+function readSealed(sealed, opts = {}) {
+  const text = fs3.readFileSync(sealed.file, "utf8");
+  if (opts.verifyHash !== false) {
+    const expected = readTextIfExists(sealed.hash)?.trim();
+    if (expected !== sha256(text)) {
+      throw new AwError(
+        `${sealed.fileName} of ${sealed.label} was modified outside the aw CLI (hash mismatch).`,
+        EXIT.TAMPERED,
+        sealed.tamperedHint
+      );
+    }
+  }
+  return parseSealedText(sealed.schema, sealed.fileName, text, sealed.label);
+}
+function writeSealed(sealed, value) {
+  const checked = sealed.schema.parse(value);
+  const text = `${JSON.stringify(checked, null, 2)}
+`;
+  writeFileAtomic(sealed.file, text);
+  writeFileAtomic(sealed.hash, `${sha256(text)}
+`);
+}
+function withFileLock(lockFile, label, fn, timeoutMs = 15e3) {
+  const started = Date.now();
+  for (; ; ) {
+    try {
+      fs3.writeFileSync(lockFile, `${process.pid}
+`, { flag: "wx" });
+      break;
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      try {
+        if (Date.now() - fs3.statSync(lockFile).mtimeMs > STALE_LOCK_MS) {
+          fs3.rmSync(lockFile, { force: true });
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() - started > timeoutMs) {
+        throw new AwError(`${label} is locked by another aw process (${lockFile}).`);
+      }
+      sleepSync(50);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    fs3.rmSync(lockFile, { force: true });
+  }
+}
+
+// src/core/refinementStore.ts
+var REFINEMENT_FILE = "refinement.json";
+var HASH_FILE = "refinement.sha256";
+var LOCK_FILE = "refinement.lock";
+var refinementsDir = (ctx) => path3.join(ctx.tasksDir, "refinements");
+var refinementRef = (ctx, id) => ({ id, dir: path3.join(refinementsDir(ctx), id) });
+var refinementPaths = (ref) => ({
+  state: path3.join(ref.dir, REFINEMENT_FILE),
+  input: path3.join(ref.dir, "input.md"),
+  briefing: path3.join(ref.dir, "briefing.md"),
+  /** The only file the product owner may write. */
+  proposal: path3.join(ref.dir, "proposal.json"),
+  proposalView: path3.join(ref.dir, "proposal.md"),
+  revisions: path3.join(ref.dir, "revisions"),
+  items: path3.join(ref.dir, "items")
+});
+function sealedRefinement(ref) {
+  return {
+    file: path3.join(ref.dir, REFINEMENT_FILE),
+    hash: path3.join(ref.dir, HASH_FILE),
+    lock: path3.join(ref.dir, LOCK_FILE),
+    schema: RefinementState,
+    label: `refinement ${ref.id}`,
+    fileName: REFINEMENT_FILE,
+    tamperedHint: "Only the aw CLI may write refinement.json. Undo the manual edit, or cancel the refinement and start a new one."
+  };
+}
+function listRefinements(ctx) {
+  const dir = refinementsDir(ctx);
+  if (!fs4.existsSync(dir)) return [];
+  return fs4.readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && fs4.existsSync(path3.join(dir, entry.name, REFINEMENT_FILE))).map((entry) => refinementRef(ctx, entry.name)).sort((first, second) => first.id.localeCompare(second.id));
+}
+function requireRefinement(ctx, id, usage) {
+  if (!id) throw new AwError("Missing the refinement id.", EXIT.USAGE, `Usage: ${usage}`);
+  const ref = refinementRef(ctx, id);
+  if (!fs4.existsSync(path3.join(ref.dir, REFINEMENT_FILE))) {
+    throw new AwError(`No refinement "${id}".`, EXIT.USAGE, "`aw refine show` lists the refinements.");
+  }
+  return ref;
+}
+function readRefinement(ref) {
+  return readSealed(sealedRefinement(ref));
+}
+function writeRefinement(ref, state) {
+  state.updatedAt = nowIso();
+  writeSealed(sealedRefinement(ref), state);
+}
+function mutateRefinement(ref, fn) {
+  return withFileLock(path3.join(ref.dir, LOCK_FILE), `Refinement ${ref.id}`, () => {
+    const state = readRefinement(ref);
+    const result = fn(state);
+    writeRefinement(ref, state);
+    return result;
+  });
+}
+function findWorkingRefinement(ctx) {
+  for (const ref of listRefinements(ctx)) {
+    const state = readRefinement(ref);
+    if (state.status === "WORKING") return { ref, state };
+  }
+  return null;
+}
+
+// src/core/store.ts
+import * as fs5 from "node:fs";
+import * as path4 from "node:path";
+var STATE_FILE = "state.json";
+var HASH_FILE2 = "state.sha256";
+var LOCK_FILE2 = "state.lock";
+var taskPaths = (ref) => ({
+  state: path4.join(ref.dir, STATE_FILE),
+  hash: path4.join(ref.dir, HASH_FILE2),
+  requirements: path4.join(ref.dir, "requirements.md"),
+  plan: path4.join(ref.dir, "plan.md"),
+  report: path4.join(ref.dir, "report.md"),
+  out: path4.join(ref.dir, "out"),
+  logs: path4.join(ref.dir, "logs"),
+  protected: path4.join(ref.dir, "protected")
+});
+function sealedState(ref) {
+  return {
+    file: path4.join(ref.dir, STATE_FILE),
+    hash: path4.join(ref.dir, HASH_FILE2),
+    lock: path4.join(ref.dir, LOCK_FILE2),
+    schema: TaskState,
+    label: `task ${ref.id}`,
+    fileName: STATE_FILE,
+    tamperedHint: "Only the aw CLI may write state.json. If the edit was intended, the orchestrator can accept it with `aw sm repair` (requires user confirmation)."
+  };
+}
 function listActive(ctx) {
-  if (!fs3.existsSync(ctx.activeDir)) return [];
-  return fs3.readdirSync(ctx.activeDir, { withFileTypes: true }).filter((d) => d.isDirectory() && fs3.existsSync(path3.join(ctx.activeDir, d.name, STATE_FILE))).map((d) => ({ id: d.name, dir: path3.join(ctx.activeDir, d.name) }));
+  if (!fs5.existsSync(ctx.activeDir)) return [];
+  return fs5.readdirSync(ctx.activeDir, { withFileTypes: true }).filter((d) => d.isDirectory() && fs5.existsSync(path4.join(ctx.activeDir, d.name, STATE_FILE))).map((d) => ({ id: d.name, dir: path4.join(ctx.activeDir, d.name) }));
 }
 function findActiveTask(ctx) {
   const active = listActive(ctx);
@@ -22238,74 +22491,17 @@ function requireActiveTask(ctx) {
   return ref;
 }
 function parseStateText(text, label) {
-  let raw;
-  try {
-    raw = JSON.parse(text);
-  } catch (e) {
-    throw new AwError(`${label}: state.json is not valid JSON: ${e.message}`, EXIT.TAMPERED);
-  }
-  const parsed = TaskState.safeParse(raw);
-  if (!parsed.success) {
-    const lines = formatIssues(parsed.error).map((l) => `  - ${l}`);
-    throw new AwError(`${label}: state.json does not match the schema:
-${lines.join("\n")}`, EXIT.TAMPERED);
-  }
-  return parsed.data;
+  return parseSealedText(TaskState, STATE_FILE, text, label);
 }
 function readState(ref, opts = {}) {
-  const p = taskPaths(ref);
-  const text = fs3.readFileSync(p.state, "utf8");
-  if (opts.verifyHash !== false) {
-    const expected = readTextIfExists(p.hash)?.trim();
-    if (expected !== sha256(text)) {
-      throw new AwError(
-        `state.json of task ${ref.id} was modified outside the aw CLI (hash mismatch).`,
-        EXIT.TAMPERED,
-        "Only the aw CLI may write state.json. If the edit was intended, the orchestrator can accept it with `aw sm repair` (requires user confirmation)."
-      );
-    }
-  }
-  return parseStateText(text, `task ${ref.id}`);
+  return readSealed(sealedState(ref), opts);
 }
 function writeState(ref, state) {
   state.updatedAt = nowIso();
-  const checked = TaskState.parse(state);
-  const text = `${JSON.stringify(checked, null, 2)}
-`;
-  const p = taskPaths(ref);
-  writeFileAtomic(p.state, text);
-  writeFileAtomic(p.hash, `${sha256(text)}
-`);
+  writeSealed(sealedState(ref), state);
 }
 function withLock(ref, fn, timeoutMs = 15e3) {
-  const lock = path3.join(ref.dir, LOCK_FILE);
-  const started = Date.now();
-  for (; ; ) {
-    try {
-      fs3.writeFileSync(lock, `${process.pid}
-`, { flag: "wx" });
-      break;
-    } catch (e) {
-      if (e.code !== "EEXIST") throw e;
-      try {
-        if (Date.now() - fs3.statSync(lock).mtimeMs > STALE_LOCK_MS) {
-          fs3.rmSync(lock, { force: true });
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      if (Date.now() - started > timeoutMs) {
-        throw new AwError(`Task ${ref.id} is locked by another aw process (${lock}).`);
-      }
-      sleepSync(50);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    fs3.rmSync(lock, { force: true });
-  }
+  return withFileLock(path4.join(ref.dir, LOCK_FILE2), `Task ${ref.id}`, fn, timeoutMs);
 }
 function mutate(ref, fn) {
   return withLock(ref, () => {
@@ -22316,7 +22512,7 @@ function mutate(ref, fn) {
   });
 }
 function backlogPath(ctx) {
-  return path3.join(ctx.tasksDir, "backlog.json");
+  return path4.join(ctx.tasksDir, "backlog.json");
 }
 function readBacklog(ctx) {
   const text = readTextIfExists(backlogPath(ctx));
@@ -22334,8 +22530,8 @@ function writeBacklog(ctx, backlog) {
 }
 
 // src/core/tests.ts
-import * as fs5 from "node:fs";
-import * as path6 from "node:path";
+import * as fs7 from "node:fs";
+import * as path7 from "node:path";
 
 // src/util/glob.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
@@ -22347,7 +22543,7 @@ function globMatcher(globs) {
 
 // src/core/gates.ts
 import { spawnSync } from "node:child_process";
-import * as path4 from "node:path";
+import * as path5 from "node:path";
 var quoteFile = (f) => /[\s"'&|<>^]/.test(f) ? `"${f.replace(/"/g, '\\"')}"` : f;
 var quoteArg = (s) => `"${s.replace(/"/g, '\\"')}"`;
 function execLogged(ctx, command, logFileAbs) {
@@ -22387,7 +22583,7 @@ function runGate(ctx, ref, runId, gate, files) {
     }
     command = command.replaceAll("{files}", files.map(quoteFile).join(" "));
   }
-  const res = execLogged(ctx, command, path4.join(taskPaths(ref).logs, `${runId}-${gate.run}.log`));
+  const res = execLogged(ctx, command, path5.join(taskPaths(ref).logs, `${runId}-${gate.run}.log`));
   const ok = gate.expect === "pass" ? res.exitCode === 0 : res.exitCode !== null && res.exitCode !== 0 && !res.timedOut;
   return {
     ...base,
@@ -22409,12 +22605,12 @@ function describeGate(g) {
 
 // src/core/git.ts
 import { spawnSync as spawnSync2 } from "node:child_process";
-import * as fs4 from "node:fs";
-import * as path5 from "node:path";
+import * as fs6 from "node:fs";
+import * as path6 from "node:path";
 var git = (cwd, ...args) => spawnSync2("git", args, { cwd, encoding: "utf8" });
 function gitRoot(cwd) {
   const r = git(cwd, "rev-parse", "--show-toplevel");
-  return r.status === 0 ? path5.resolve(r.stdout.trim()) : cwd;
+  return r.status === 0 ? path6.resolve(r.stdout.trim()) : cwd;
 }
 function changedFiles(root, baseRef) {
   const out = /* @__PURE__ */ new Set();
@@ -22431,7 +22627,7 @@ function changedFiles(root, baseRef) {
 }
 function excludeFile(root) {
   const r = git(root, "rev-parse", "--git-path", "info/exclude");
-  return r.status === 0 ? path5.resolve(root, r.stdout.trim()) : null;
+  return r.status === 0 ? path6.resolve(root, r.stdout.trim()) : null;
 }
 function isIgnored(root, relPath) {
   const r = git(root, "check-ignore", "-q", "--no-index", relPath);
@@ -22453,15 +22649,15 @@ ${END}
 `;
   }
   if (text === before) return false;
-  fs4.mkdirSync(path5.dirname(file2), { recursive: true });
-  fs4.writeFileSync(file2, text, "utf8");
+  fs6.mkdirSync(path6.dirname(file2), { recursive: true });
+  fs6.writeFileSync(file2, text, "utf8");
   return true;
 }
 function ensureIgnoreLine(file2, entry, comment) {
   const text = readTextIfExists(file2) ?? "";
   const bare = entry.replace(/^\//, "");
   if (text.split(/\r?\n/).some((l) => l.trim() === entry || l.trim() === bare)) return false;
-  fs4.appendFileSync(file2, `${text && !text.endsWith("\n") ? "\n" : ""}# ${comment}
+  fs6.appendFileSync(file2, `${text && !text.endsWith("\n") ? "\n" : ""}# ${comment}
 ${entry}
 `);
   return true;
@@ -22475,7 +22671,7 @@ function taskTestFiles(ctx, s) {
   for (const t of latestSubmittedTester(s)?.output?.tests ?? []) candidates.add(t.file);
   for (const r of s.runs) if (r.role === "coder" && r.output) for (const t of r.output.testsAdded) candidates.add(t.file);
   for (const f of changedFiles(ctx.root, s.git.baseRef)) if (isTestPath(f)) candidates.add(f);
-  const existing = [...candidates].filter((f) => fs5.existsSync(path6.join(ctx.root, f)));
+  const existing = [...candidates].filter((f) => fs7.existsSync(path7.join(ctx.root, f)));
   const specs = existing.filter((f) => SPEC_FILE.test(f));
   return (specs.length ? specs : existing).sort();
 }
@@ -22504,11 +22700,17 @@ function testCommandPrefixes(config2) {
 }
 
 // src/hooks/identity.ts
-var AW_AGENT = /(?:^|:)aw:(tester|reviewer|coder)$/;
+var AW_ROLE_AGENT = /(?:^|:)aw:(tester|reviewer|coder)$/;
+var AW_PRODUCT_OWNER_AGENT = /(?:^|:)aw:product-owner$/;
 function identify(agentType) {
   if (typeof agentType !== "string" || agentType === "") return { kind: "main" };
-  const m = AW_AGENT.exec(agentType);
-  return m ? { kind: "role", role: m[1] } : { kind: "other", agentType };
+  const role = AW_ROLE_AGENT.exec(agentType);
+  if (role) return { kind: "role", role: role[1] };
+  if (AW_PRODUCT_OWNER_AGENT.test(agentType)) return { kind: "product-owner" };
+  return { kind: "other", agentType };
+}
+function isAwAgent(identity) {
+  return identity.kind === "role" || identity.kind === "product-owner";
 }
 
 // src/hooks/shell.ts
@@ -22567,7 +22769,7 @@ function findAwInvocations(command) {
 }
 var STATE_WRITE = /(>|\btee\b|\bmv\b|\bcp\b|\brm\b|\bsed\s+-i|\bperl\s+-i|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|writeFile|\bdel\b|\bcopy\b|\bmove\b)/i;
 function writesStateFile(command) {
-  return /state\.(json|sha256)\b/.test(command) && STATE_WRITE.test(command);
+  return /(state|refinement)\.(json|sha256)\b/.test(command) && STATE_WRITE.test(command);
 }
 
 // src/hooks/guards.ts
@@ -22604,18 +22806,36 @@ function preToolUse(ctx, input2) {
 }
 function guardUninitialized(input2) {
   const who = identify(input2.agent_type);
-  if (who.kind !== "role") return null;
+  if (!isAwAgent(who)) return null;
   const tool = input2.tool_name ?? "";
   const onlyAw = (cmd) => splitSegments(cmd).every((seg) => findAwInvocations(seg).length > 0);
   const changes = EDIT_TOOLS.has(tool) || SHELL_TOOLS.has(tool) && !onlyAw(String(input2.tool_input?.command ?? ""));
   if (!changes) return null;
   return deny(
-    `aw is not set up in this repository (no .claude/aw.config.json), so the ${who.role} may not change anything here. Stop and report this in one line.`
+    `aw is not set up in this repository (no .claude/aw.config.json), so ${agentName(who)} may not change anything here. Stop and report this in one line.`
   );
+}
+function agentName(who) {
+  return who.kind === "role" ? `the ${who.role}` : "the product owner";
+}
+var READ_ONLY_REFINE_ACTIONS = /* @__PURE__ */ new Set(["next", "show"]);
+function checkRefine(who, action) {
+  if (who.kind === "role") return deny(`the ${who.role} may not run "aw refine \u2026"; refinements happen outside the task pipeline.`);
+  if (who.kind === "other" && !READ_ONLY_REFINE_ACTIONS.has(action ?? "")) {
+    return deny("only the main session runs `aw refine` commands; other agents may only read (`aw refine next`, `aw refine show`).");
+  }
+  if (action === "submit") {
+    return deny("`aw refine submit` is run by the aw:product-owner agent. Start one with `aw refine start-agent <id>`.");
+  }
+  if (action === "approve") {
+    return ask('human gate \u2014 "aw refine approve" records YOUR decision. Confirm only if you approve the split into tasks.');
+  }
+  return null;
 }
 function checkAw(who, inv) {
   const { sub, action } = inv;
   if (sub === "hook") return deny("`aw hook` is reserved for Claude Code hooks.");
+  if (sub === "refine") return checkRefine(who, action);
   if (sub === "sm") {
     if (who.kind === "role") return deny(`the ${who.role} may not run orchestrator commands (aw sm \u2026). Use \`aw ${who.role} \u2026\`.`);
     if (who.kind === "other" && action !== "next") return deny("only the main session (scrum-master) runs `aw sm` commands.");
@@ -22641,12 +22861,22 @@ function findTestRunnerCall(config2, segments) {
   return segments.find(startsTestRunner);
 }
 var useAwTestInstead = (call) => `run tests through \`aw test\`, not "${firstWords(call)}". \`aw test\` runs this task's test files; narrow it with -t "<test name>" or pass files. Don't run the whole suite \u2014 submit runs it once as a gate.`;
+var PRODUCT_OWNER_COMMAND = /^(?:(?:\S*[\\/])?aw(?:\.cmd)?|node (?:"[^"]*aw\.mjs"|'[^']*aw\.mjs'|\S*aw\.mjs)) (?:refine submit|schema refine)(?: 2>&1)?$/;
+function checkProductOwnerShell(command) {
+  const isAllowed = (segment) => PRODUCT_OWNER_COMMAND.test(segment.replace(/\s+/g, " ").trim());
+  const blocked = splitSegments(command).find((segment) => !isAllowed(segment));
+  if (blocked === void 0) return null;
+  return deny(
+    `the product owner runs only "aw refine submit" and "aw schema refine" ("${firstWords(blocked)}" is not allowed). Read the repository with Read, Grep and Glob; write only your proposal file.`
+  );
+}
 function checkShell(ctx, who, command) {
+  if (who.kind === "product-owner") return checkProductOwnerShell(command);
   for (const invocation of findAwInvocations(command)) {
     const decision = checkAw(who, invocation);
     if (decision) return decision;
   }
-  if (writesStateFile(command)) return deny("state.json / state.sha256 are written only by the aw CLI. Use aw commands.");
+  if (writesStateFile(command)) return deny("state.json, refinement.json and their .sha256 seals are written only by the aw CLI. Use aw commands.");
   if (who.kind !== "role") return null;
   const segments = splitSegments(command).filter((segment) => findAwInvocations(segment).length === 0);
   if (directTestCommandsBlocked(ctx.config)) {
@@ -22671,9 +22901,10 @@ function checkEdit(ctx, who, file2, cwd) {
   const relPath = relativeToRoot(ctx.root, file2, cwd);
   const tasksRel = relativeToRoot(ctx.root, ctx.tasksDir) ?? "";
   const inTasks = relPath !== null && tasksRel !== "" && (relPath + "/").toLowerCase().startsWith(`${tasksRel}/`.toLowerCase());
-  if (relPath && /(^|\/)state\.(json|sha256)$/.test(relPath) && inTasks) {
-    return deny("state.json / state.sha256 are written only by the aw CLI. Use aw commands.");
+  if (relPath && /(^|\/)(state|refinement)\.(json|sha256)$/.test(relPath) && inTasks) {
+    return deny("state.json, refinement.json and their .sha256 seals are written only by the aw CLI. Use aw commands.");
   }
+  if (who.kind === "product-owner") return checkProductOwnerEdit(ctx, relPath);
   const { task, error: error62 } = loadTask(ctx);
   if (who.kind !== "role") {
     if (task && ctx.config.guards.blockMainSessionEditsDuringRuns && WORKING_STATUSES.includes(task.s.status) && !inTasks) {
@@ -22708,6 +22939,20 @@ function checkEdit(ctx, who, file2, cwd) {
   }
   return null;
 }
+function checkProductOwnerEdit(ctx, relPath) {
+  let working;
+  try {
+    working = findWorkingRefinement(ctx);
+  } catch (e) {
+    return deny(`cannot read the refinements: ${e.message}`);
+  }
+  if (!working) {
+    return deny("no refinement has an active product-owner run, so the product owner may not write anything. Stop and report this in one line.");
+  }
+  const proposal = rel(ctx, refinementPaths(working.ref).proposal);
+  if (relPath && samePath(relPath, proposal)) return null;
+  return deny(`the product owner writes only its proposal, ${proposal}. Everything else goes into the proposal (summary, risks, openQuestions).`);
+}
 function checkHandback(ctx, role, message) {
   const { task } = loadTask(ctx);
   if (!task) return null;
@@ -22721,7 +22966,7 @@ function checkHandback(ctx, role, message) {
 }
 
 // src/core/next.ts
-var agentName = (role) => `aw:${role}`;
+var agentName2 = (role) => `aw:${role}`;
 function startMessage(s, role) {
   return `Task ${s.id}. You are the ${role} in the aw pipeline. Your first action: run \`aw ${role} start\` and follow the briefing it prints. If it fails, stop and reply with the error in one line.`;
 }
@@ -22738,8 +22983,8 @@ function spawn(ctx, s, role) {
   return {
     kind: "spawn-agent",
     lines: [
-      `AGENT: ${agentName(role)}`,
-      resume ? `HOW: resume agent ${agentId} with SendMessage (policy "${policy}"). If resuming fails, spawn a fresh ${agentName(role)} with the fresh message below.` : `HOW: spawn a fresh ${agentName(role)} (Agent tool, run_in_background: false).`,
+      `AGENT: ${agentName2(role)}`,
+      resume ? `HOW: resume agent ${agentId} with SendMessage (policy "${policy}"). If resuming fails, spawn a fresh ${agentName2(role)} with the fresh message below.` : `HOW: spawn a fresh ${agentName2(role)} (Agent tool, run_in_background: false).`,
       `MESSAGE: ${resume ? resumeMessage(s, role) : startMessage(s, role)}`,
       ...resume ? [`FRESH MESSAGE: ${startMessage(s, role)}`] : [],
       "AFTER: when the agent returns, run `aw sm next` again. Don't act on the agent's reply \u2014 the state is the source of truth."
@@ -22764,7 +23009,7 @@ function nextAction(ctx, s) {
     return {
       kind: "recover-agent",
       lines: [
-        `Run ${run2?.id ?? "?"} of ${agentName(role.role)} is still open${run2?.stoppedWithoutSubmit ? " \u2014 the agent stopped without submitting" : ""}.`,
+        `Run ${run2?.id ?? "?"} of ${agentName2(role.role)} is still open${run2?.stoppedWithoutSubmit ? " \u2014 the agent stopped without submitting" : ""}.`,
         "If the agent is still working, wait for it. If it already returned, it did not finish the protocol:",
         `- resume ${agent} with SendMessage: "${run2 ? recoverMessage(run2) : ""}"`,
         '- or discard the run and start the step again: `aw sm reset --note "<why>"`'
@@ -22830,9 +23075,114 @@ function formatNext(s, a) {
   return [...head, `NEXT: ${a.kind}`, ...a.lines].join("\n");
 }
 
+// src/core/refinementMachine.ts
+var INPUT_PLACEHOLDER = "<!-- aw: paste the slice description here VERBATIM, exactly as the user / ticket gave it. Do not summarize or rephrase. -->\n";
+function writtenInput(text) {
+  return (text ?? "").replace(/<!--[\s\S]*?-->/g, "").trim();
+}
+function addRefinementEvent(s, by, event, note) {
+  s.history.push({ at: nowIso(), by, event, ...note ? { note } : {} });
+}
+function nextRefinementId(s, counter, prefix) {
+  s.counters[counter] += 1;
+  return `${prefix}-${s.counters[counter]}`;
+}
+function requireStatus(s, allowed, action) {
+  if (!allowed.includes(s.status)) {
+    throw new AwError(
+      `Refinement ${s.id} is ${s.status}; "${action}" needs ${allowed.join(" or ")}.`,
+      EXIT.STATUS_MISMATCH,
+      `See \`aw refine next ${s.id}\`.`
+    );
+  }
+}
+function activeRefinementRun(s) {
+  return s.runs.find((run2) => run2.state === "active");
+}
+function pendingRefinementNotes(s) {
+  return s.notes.filter((note) => !note.consumedByRun);
+}
+function latestRevision(s) {
+  return s.revisions.at(-1);
+}
+function abandonActiveRun(s, reason) {
+  const run2 = activeRefinementRun(s);
+  if (!run2) return;
+  run2.state = "abandoned";
+  run2.finishedAt = nowIso();
+  run2.abandonReason = reason;
+  for (const note of s.notes) if (note.consumedByRun === run2.id) delete note.consumedByRun;
+}
+var itemIdAt = (position) => `I-${position}`;
+function toRevision(s, run2, out) {
+  return {
+    revision: s.revisions.length + 1,
+    runId: run2.id,
+    at: nowIso(),
+    summary: out.summary,
+    items: out.items.map((item, index) => ({
+      id: itemIdAt(index + 1),
+      position: index + 1,
+      title: item.title,
+      goal: item.goal,
+      scope: item.scope,
+      acceptanceCriteria: item.acceptanceCriteria,
+      dependsOn: item.dependsOn.map(itemIdAt),
+      suggestedMode: item.suggestedMode,
+      modeReason: item.modeReason,
+      touches: item.touches,
+      risks: item.risks,
+      ...item.prerequisiteFor ? { prerequisiteFor: item.prerequisiteFor } : {}
+    })),
+    coverage: out.coverage.map((entry) => ({ requirement: entry.requirement, items: entry.items.map(itemIdAt) })),
+    outOfScope: out.outOfScope,
+    openQuestions: out.openQuestions,
+    processNotes: out.processNotes,
+    addressedNotes: out.addressedNotes
+  };
+}
+
 // src/hooks/lifecycle.ts
+function productOwnerStart(ctx, input2) {
+  const working = findWorkingRefinement(ctx);
+  if (!working) {
+    return "aw: no refinement has an active product-owner run, so there is nothing to refine. Reply in one line that the orchestrator must run `aw refine start-agent <id>` first, and stop.";
+  }
+  const run2 = mutateRefinement(working.ref, (s) => {
+    const active = activeRefinementRun(s);
+    if (active && input2.agent_id && !active.agentId) {
+      active.agentId = input2.agent_id;
+      addRefinementEvent(s, "hook", "agent_spawned", input2.agent_id);
+    }
+    return active;
+  });
+  const paths = refinementPaths(working.ref);
+  return `aw: you are aw:product-owner for refinement ${working.ref.id} (run ${run2?.id ?? "?"}). Read ${rel(ctx, paths.briefing)} first. Write only ${rel(ctx, paths.proposal)}, then run \`aw refine submit\`.`;
+}
+function productOwnerStop(ctx, input2) {
+  const working = findWorkingRefinement(ctx);
+  if (!working) return null;
+  const proposal = rel(ctx, refinementPaths(working.ref).proposal);
+  return mutateRefinement(working.ref, (s) => {
+    const run2 = activeRefinementRun(s);
+    if (!run2 || run2.agentId && input2.agent_id && run2.agentId !== input2.agent_id) return null;
+    if (input2.agent_transcript_path) run2.transcriptPath = input2.agent_transcript_path;
+    if (run2.stopBlocks < ctx.config.limits.stopBlocks) {
+      run2.stopBlocks += 1;
+      addRefinementEvent(s, "hook", "stop_blocked", run2.id);
+      return {
+        decision: "block",
+        reason: `You haven't submitted a proposal yet. Write it to ${proposal} and run \`aw refine submit\`; if it reports errors, fix the file and run it again. Then reply in one line.`
+      };
+    }
+    run2.stoppedWithoutSubmit = true;
+    addRefinementEvent(s, "hook", "agent_stopped_without_submit", run2.id);
+    return null;
+  });
+}
 function subagentStart(ctx, input2) {
   const who = identify(input2.agent_type);
+  if (who.kind === "product-owner") return productOwnerStart(ctx, input2);
   if (who.kind !== "role") return null;
   const ref = findActiveTask(ctx);
   if (!ref) return `aw: there is no active task \u2014 \`aw ${who.role} start\` will fail. Report that in one line and stop.`;
@@ -22846,6 +23196,7 @@ function subagentStart(ctx, input2) {
 }
 function subagentStop(ctx, input2) {
   const who = identify(input2.agent_type);
+  if (who.kind === "product-owner") return productOwnerStop(ctx, input2);
   if (who.kind !== "role") return null;
   const ref = findActiveTask(ctx);
   if (!ref) return null;
@@ -22883,11 +23234,16 @@ function subagentStop(ctx, input2) {
 function afterAgentCall(ctx, input2) {
   const tool = input2.tool_name ?? "";
   const ti = input2.tool_input ?? {};
+  const spawnsAgent = tool === "Agent" || tool === "Task";
+  const calledAgent = identify(String(ti.subagent_type ?? ""));
+  if (spawnsAgent && calledAgent.kind === "product-owner") {
+    return "aw: run `aw refine next` \u2014 don't rely on the product owner's reply; the refinement state is the source of truth.";
+  }
   const ref = findActiveTask(ctx);
   if (!ref) return null;
   const s = readState(ref);
   let relevant = false;
-  if (tool === "Agent" || tool === "Task") relevant = identify(String(ti.subagent_type ?? "")).kind === "role";
+  if (spawnsAgent) relevant = calledAgent.kind === "role";
   if (tool === "SendMessage") relevant = s.runs.some((r) => r.agentId && r.agentId === ti.to);
   if (!relevant) return null;
   return `aw: task ${s.id} is now ${s.status}. Don't rely on the agent's reply \u2014 run \`aw sm next\`.`;
@@ -22903,7 +23259,7 @@ function hookCommand(argv, io) {
   } catch {
     return EXIT.OK;
   }
-  const guardedAgent = event === "pre-tool-use" && identify(input2.agent_type).kind === "role";
+  const guardedAgent = event === "pre-tool-use" && isAwAgent(identify(input2.agent_type));
   const failClosed = (message) => {
     if (guardedAgent) {
       emit(io, {
@@ -22921,7 +23277,7 @@ function hookCommand(argv, io) {
           hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: d.permissionDecision, permissionDecisionReason: d.reason }
         });
       }
-      if (event === "subagent-start" && identify(input2.agent_type).kind === "role") {
+      if (event === "subagent-start" && isAwAgent(identify(input2.agent_type))) {
         emit(io, {
           hookSpecificOutput: {
             hookEventName: "SubagentStart",
@@ -22966,32 +23322,32 @@ function hookCommand(argv, io) {
 }
 
 // src/commands/info.ts
-import * as fs7 from "node:fs";
-import * as path9 from "node:path";
+import * as fs9 from "node:fs";
+import * as path10 from "node:path";
 
 // src/core/briefing.ts
-import * as path8 from "node:path";
+import * as path9 from "node:path";
 
 // src/core/pluginFiles.ts
-import * as fs6 from "node:fs";
-import * as path7 from "node:path";
+import * as fs8 from "node:fs";
+import * as path8 from "node:path";
 import { fileURLToPath } from "node:url";
 function templatesDir(env = process.env) {
-  const here = path7.dirname(fileURLToPath(import.meta.url));
+  const here = path8.dirname(fileURLToPath(import.meta.url));
   const candidates = [
     env.AW_TEMPLATES_DIR,
-    path7.resolve(here, "../templates"),
+    path8.resolve(here, "../templates"),
     // bundled: plugins/aw/cli/aw.mjs
-    path7.resolve(here, "../../plugins/aw/templates")
+    path8.resolve(here, "../../plugins/aw/templates")
     // source: src/core/pluginFiles.ts
   ].filter((candidate) => !!candidate);
-  const found = candidates.find((candidate) => fs6.existsSync(path7.join(candidate, "role-notes")));
+  const found = candidates.find((candidate) => fs8.existsSync(path8.join(candidate, "role-notes")));
   if (!found) throw new AwError(`aw templates not found (looked in: ${candidates.join(", ")}).`);
   return found;
 }
 function readPluginTemplate(name) {
   try {
-    return readTextIfExists(path7.join(templatesDir(), name));
+    return readTextIfExists(path8.join(templatesDir(), name));
   } catch {
     return null;
   }
@@ -23018,7 +23374,7 @@ function cleanNotes(text) {
   return result || null;
 }
 function readRoleNotes(ctx, name) {
-  const text = readTextIfExists(path8.join(ctx.roleNotesDir, `${name}.md`));
+  const text = readTextIfExists(path9.join(ctx.roleNotesDir, `${name}.md`));
   return text ? cleanNotes(text) : null;
 }
 function codeStandardsSection(ctx, h, out) {
@@ -23357,6 +23713,51 @@ var EXAMPLES = {
     wentWell: ["Tests written first caught the window boundary bug before review."],
     wentWrong: ["Plan contract did not specify the 429 body; the tester had to guess."],
     processImprovements: ["Plan template: always specify error response shapes in the contract."]
+  },
+  refine: {
+    summary: "Users module: a walking skeleton first (create and read one user end to end), then listing. The test database comes first because every item's tests need it. Editing and deleting are a later phase.",
+    items: [
+      {
+        title: "Test database for integration tests",
+        goal: "Integration tests run against a real Postgres with a clean database per test file.",
+        scope: ["docker compose service for the test database", "migrations applied before the tests", "tables emptied between tests"],
+        acceptanceCriteria: ["`npm test` runs the integration tests against the test database and leaves it empty afterwards."],
+        suggestedMode: "light",
+        modeReason: "Configuration only, no user-visible behavior.",
+        touches: ["docker-compose.yml", "test/setup.ts"],
+        prerequisiteFor: "Items 2 and 3 test their endpoints against the database."
+      },
+      {
+        title: "Create a user and read it back",
+        goal: "POST /users creates a user and GET /users/:id returns it.",
+        scope: ["users table and migration", "POST /users with validation", "GET /users/:id"],
+        acceptanceCriteria: [
+          "POST /users with a valid email and name returns 201 and the stored user.",
+          "POST /users with an email already used by an active user returns 409.",
+          "GET /users/:id returns 404 for an unknown id."
+        ],
+        dependsOn: [1],
+        suggestedMode: "tdd",
+        modeReason: "New behavior with error cases.",
+        touches: ["src/routes/users.ts", "src/db/schema.ts"]
+      },
+      {
+        title: "List users with paging",
+        goal: "GET /users returns users newest first, in pages.",
+        scope: ["GET /users with limit and offset", "total count"],
+        acceptanceCriteria: ["GET /users returns at most `limit` users, newest first, with the total count."],
+        dependsOn: [2],
+        suggestedMode: "tdd",
+        modeReason: "New endpoint with paging rules.",
+        risks: ["Stable order when two users have the same creation time."]
+      }
+    ],
+    coverage: [
+      { requirement: "Users can be created and fetched by id.", items: [2] },
+      { requirement: "The list of users is paged.", items: [3] }
+    ],
+    outOfScope: ["Editing and deleting users: the slice text mentions them only as a later phase."],
+    openQuestions: ["Should the list include soft-deleted users for admins?"]
   }
 };
 
@@ -23400,9 +23801,9 @@ function bool(args, name) {
 
 // src/commands/info.ts
 function findArchived(ctx, id) {
-  if (!fs7.existsSync(ctx.archiveDir)) return null;
-  const match = fs7.readdirSync(ctx.archiveDir).filter((d) => d === id || d.endsWith(`_${id}`) || /^-\d+$/.test(d.slice(id.length)) && d.startsWith(id)).sort().at(-1);
-  return match ? path9.join(ctx.archiveDir, match) : null;
+  if (!fs9.existsSync(ctx.archiveDir)) return null;
+  const match = fs9.readdirSync(ctx.archiveDir).filter((d) => d === id || d.endsWith(`_${id}`) || /^-\d+$/.test(d.slice(id.length)) && d.startsWith(id)).sort().at(-1);
+  return match ? path10.join(ctx.archiveDir, match) : null;
 }
 function showCommand(argv, io) {
   const args = parseArgs(argv, ["json"]);
@@ -23412,7 +23813,7 @@ function showCommand(argv, io) {
   if (taskId) {
     const dir = findArchived(ctx, taskId);
     if (!dir) throw new AwError(`No archived task ${taskId} in ${rel(ctx, ctx.archiveDir)}.`);
-    s = parseStateText(fs7.readFileSync(path9.join(dir, STATE_FILE), "utf8"), taskId);
+    s = parseStateText(fs9.readFileSync(path10.join(dir, STATE_FILE), "utf8"), taskId);
   } else {
     const ref = findActiveTask(ctx);
     if (ref) s = readState(ref);
@@ -23525,10 +23926,10 @@ function backlogCommand(argv, io) {
 }
 function statsCommand(_argv, io) {
   const ctx = loadCtx(io.cwd);
-  const dirs = fs7.existsSync(ctx.archiveDir) ? fs7.readdirSync(ctx.archiveDir) : [];
+  const dirs = fs9.existsSync(ctx.archiveDir) ? fs9.readdirSync(ctx.archiveDir) : [];
   const tasks = [];
   for (const d of dirs) {
-    const text = readTextIfExists(path9.join(ctx.archiveDir, d, STATE_FILE));
+    const text = readTextIfExists(path10.join(ctx.archiveDir, d, STATE_FILE));
     if (!text) continue;
     try {
       tasks.push(parseStateText(text, d));
@@ -23586,10 +23987,10 @@ function listFiles(root, limit = 2e4) {
   const skip = /* @__PURE__ */ new Set(["node_modules", ".git", "dist", "build", "coverage", ".next", ".turbo"]);
   const walk = (dir, prefix) => {
     if (out.length >= limit) return;
-    for (const e of fs7.readdirSync(dir, { withFileTypes: true })) {
+    for (const e of fs9.readdirSync(dir, { withFileTypes: true })) {
       if (out.length >= limit) return;
       if (e.isDirectory()) {
-        if (!skip.has(e.name)) walk(path9.join(dir, e.name), `${prefix}${e.name}/`);
+        if (!skip.has(e.name)) walk(path10.join(dir, e.name), `${prefix}${e.name}/`);
       } else out.push(`${prefix}${e.name}`);
     }
   };
@@ -23617,7 +24018,7 @@ function doctorCommand(_argv, io) {
   let ctx;
   try {
     ctx = loadCtx(io.cwd);
-    ok(`config valid: ${path9.join(root, CONFIG_FILE)}`);
+    ok(`config valid: ${path10.join(root, CONFIG_FILE)}`);
   } catch (e) {
     bad(e.message);
     return EXIT.VALIDATION;
@@ -23625,7 +24026,7 @@ function doctorCommand(_argv, io) {
   const major = Number(process.versions.node.split(".")[0]);
   if (major >= 20) ok(`node ${process.versions.node}`);
   else bad(`node ${process.versions.node} \u2014 aw needs >= 20`);
-  const pkg = readTextIfExists(path9.join(ctx.root, "package.json"));
+  const pkg = readTextIfExists(path10.join(ctx.root, "package.json"));
   const scripts = pkg ? JSON.parse(pkg).scripts ?? {} : {};
   for (const [name, command] of Object.entries(ctx.config.commands)) {
     const script = scriptOf(command);
@@ -23644,22 +24045,22 @@ function doctorCommand(_argv, io) {
   if (tests) ok(`tests.globs match ${tests} existing file(s)`);
   else warn("tests.globs match no existing files \u2014 check the globs (the tester can only write files matching them)");
   for (const d of ctx.config.docs) {
-    if (!fs7.existsSync(path9.join(ctx.root, d.path))) bad(`docs: ${d.path} does not exist`);
+    if (!fs9.existsSync(path10.join(ctx.root, d.path))) bad(`docs: ${d.path} does not exist`);
     else if (/TODO/i.test(d.when)) warn(`docs: ${d.path} \u2014 "when" is still TODO`);
     else ok(`docs: ${d.path}`);
   }
   if (!ctx.config.docs.length) warn("docs index is empty \u2014 the docs check will have nothing to compare against");
-  for (const name of [...Role.options, "scrum-master"]) {
-    const file2 = path9.join(ctx.roleNotesDir, `${name}.md`);
-    if (!fs7.existsSync(file2)) warn(`role notes missing: ${rel(ctx, file2)}`);
+  for (const name of [...Role.options, "scrum-master", "product-owner"]) {
+    const file2 = path10.join(ctx.roleNotesDir, `${name}.md`);
+    if (!fs9.existsSync(file2)) warn(`role notes missing: ${rel(ctx, file2)}`);
     else if (!readRoleNotes(ctx, name)) warn(`role notes are still an empty template: ${rel(ctx, file2)}`);
     else ok(`role notes: ${rel(ctx, file2)}`);
   }
-  const instructions = ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"].filter((f) => fs7.existsSync(path9.join(ctx.root, f)));
+  const instructions = ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"].filter((f) => fs9.existsSync(path10.join(ctx.root, f)));
   if (instructions.length) ok(`project instructions: ${instructions.join(", ")}`);
   else warn("no CLAUDE.md / CLAUDE.local.md \u2014 agents start without project instructions (see /aw:init)");
-  if (instructions.includes("CLAUDE.local.md") && !instructions.some((f) => f !== "CLAUDE.local.md") && fs7.existsSync(path9.join(ctx.root, "AGENTS.md"))) {
-    const local = readTextIfExists(path9.join(ctx.root, "CLAUDE.local.md")) ?? "";
+  if (instructions.includes("CLAUDE.local.md") && !instructions.some((f) => f !== "CLAUDE.local.md") && fs9.existsSync(path10.join(ctx.root, "AGENTS.md"))) {
+    const local = readTextIfExists(path10.join(ctx.root, "CLAUDE.local.md")) ?? "";
     if (!/^@AGENTS\.md\s*$/m.test(local)) warn("CLAUDE.local.md hides AGENTS.md (Claude reads AGENTS.md only without CLAUDE*.md) \u2014 add a line `@AGENTS.md` to CLAUDE.local.md");
   }
   const tasksRel = ctx.config.paths.tasksDir.replace(/^\.\//, "").replace(/\/$/, "");
@@ -23690,17 +24091,17 @@ ${problems} problem(s).` : "\nAll good.");
 }
 
 // src/commands/init.ts
-import * as fs8 from "node:fs";
-import * as path10 from "node:path";
-var REPO_NOTE_FILES = ["coder", "tester", "reviewer", "scrum-master", "code-standards"];
+import * as fs10 from "node:fs";
+import * as path11 from "node:path";
+var REPO_NOTE_FILES = ["coder", "tester", "reviewer", "scrum-master", "product-owner", "code-standards"];
 function detect(root) {
   const notes = [];
-  const pkgText = readTextIfExists(path10.join(root, "package.json"));
+  const pkgText = readTextIfExists(path11.join(root, "package.json"));
   const pkg = pkgText ? JSON.parse(pkgText) : null;
   if (!pkg) notes.push("no package.json \u2014 fill `commands` by hand");
   const scripts = pkg?.scripts ?? {};
   const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
-  const has = (f) => fs8.existsSync(path10.join(root, f));
+  const has = (f) => fs10.existsSync(path11.join(root, f));
   const pm = has("pnpm-lock.yaml") ? "pnpm" : has("yarn.lock") ? "yarn" : has("bun.lockb") || has("bun.lock") ? "bun" : "npm";
   const run2 = (script) => pm === "yarn" ? `yarn ${script}` : `${pm} run ${script}`;
   const pick2 = (...names) => names.find((n) => n in scripts);
@@ -23727,15 +24128,15 @@ function detect(root) {
   if (!commands.test) notes.push("no `test` script \u2014 the coder gate runs only the task's test files");
   const docs = [];
   if (has("README.md")) docs.push({ path: "README.md", when: "TODO: e.g. setup, usage or configuration changes" });
-  const docsDir = path10.join(root, "docs");
-  if (fs8.existsSync(docsDir)) {
+  const docsDir = path11.join(root, "docs");
+  if (fs10.existsSync(docsDir)) {
     const found = [];
     const walk = (dir, depth) => {
-      for (const e of fs8.readdirSync(dir, { withFileTypes: true })) {
+      for (const e of fs10.readdirSync(dir, { withFileTypes: true })) {
         if (found.length >= 15) return;
-        const p = path10.join(dir, e.name);
+        const p = path11.join(dir, e.name);
         if (e.isDirectory() && depth < 2) walk(p, depth + 1);
-        else if (e.isFile() && /\.mdx?$/.test(e.name)) found.push(toPosix(path10.relative(root, p)));
+        else if (e.isFile() && /\.mdx?$/.test(e.name)) found.push(toPosix(path11.relative(root, p)));
       }
     };
     walk(docsDir, 0);
@@ -23764,7 +24165,7 @@ function applySharingMode(root, cfg, shared, report) {
   const exclude = excludeFile(root);
   if (shared) {
     if (exclude && setManagedBlock(exclude, null)) report.push("removed the aw block from .git/info/exclude");
-    const gitignore = path10.join(root, ".gitignore");
+    const gitignore = path11.join(root, ".gitignore");
     for (const entry of traceEntries(cfg)) {
       if (ensureIgnoreLine(gitignore, entry, "aw task state, traces and archive")) report.push(`added ${entry} to .gitignore`);
     }
@@ -23776,19 +24177,19 @@ function applySharingMode(root, cfg, shared, report) {
     return;
   }
   setManagedBlock(exclude, localEntries(cfg));
-  report.push(`mode: local ("ghost") \u2014 aw files are hidden from git via ${toPosix(path10.relative(root, exclude))}; .gitignore untouched`);
+  report.push(`mode: local ("ghost") \u2014 aw files are hidden from git via ${toPosix(path11.relative(root, exclude))}; .gitignore untouched`);
 }
 function initCommand(argv, io) {
   const args = parseArgs(argv, ["force", "shared", "local"]);
   const shared = bool(args, "shared");
   const root = gitRoot(io.cwd);
-  const configPath = path10.join(root, CONFIG_FILE);
+  const configPath = path11.join(root, CONFIG_FILE);
   const templates = templatesDir(io.env);
   const report = [];
-  const exists2 = fs8.existsSync(configPath);
+  const exists2 = fs10.existsSync(configPath);
   let cfg;
   if (exists2 && !bool(args, "force")) {
-    cfg = parseConfig(JSON.parse(fs8.readFileSync(configPath, "utf8")));
+    cfg = parseConfig(JSON.parse(fs10.readFileSync(configPath, "utf8")));
     report.push(`config exists: ${CONFIG_FILE} (kept; --force regenerates it)`);
   } else {
     const d = detect(root);
@@ -23807,41 +24208,283 @@ function initCommand(argv, io) {
     report.push(...Object.entries(d.commands).map(([k, v]) => `  commands.${k} = ${v}`));
     report.push(...d.notes.map((n) => `  NOTE: ${n}`));
   }
-  const schemaPath = path10.join(root, ".claude", "aw.config.schema.json");
+  const schemaPath = path11.join(root, ".claude", "aw.config.schema.json");
   writeFileAtomic(schemaPath, `${JSON.stringify(external_exports.toJSONSchema(Config, { io: "input", unrepresentable: "any" }), null, 2)}
 `);
   report.push("wrote .claude/aw.config.schema.json (editor autocomplete for the config)");
-  const notesDir = path10.resolve(root, cfg.paths.roleNotesDir);
+  const notesDir = path11.resolve(root, cfg.paths.roleNotesDir);
   ensureDir(notesDir);
   for (const name of REPO_NOTE_FILES) {
-    const target = path10.join(notesDir, `${name}.md`);
-    const shown = toPosix(path10.relative(root, target));
-    if (fs8.existsSync(target)) {
+    const target = path11.join(notesDir, `${name}.md`);
+    const shown = toPosix(path11.relative(root, target));
+    if (fs10.existsSync(target)) {
       report.push(`kept ${shown}`);
       continue;
     }
-    fs8.copyFileSync(path10.join(templates, "role-notes", `${name}.md`), target);
+    fs10.copyFileSync(path11.join(templates, "role-notes", `${name}.md`), target);
     report.push(`created ${shown} (template \u2014 fill it in)`);
   }
   applySharingMode(root, cfg, shared, report);
-  const has = (f) => fs8.existsSync(path10.join(root, f));
+  const has = (f) => fs10.existsSync(path11.join(root, f));
   const instructions = ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md", "AGENTS.md"].filter(has);
   report.push(`project instructions found: ${instructions.length ? instructions.join(", ") : "none"}`);
   report.push(`instruction file for aw additions: ${shared ? "CLAUDE.md" : "CLAUDE.local.md (loaded after CLAUDE.md, never committed)"}`);
-  report.push(`CLAUDE.md sections template: ${toPosix(path10.join(templates, "CLAUDE.section.md"))}`);
+  report.push(`CLAUDE.md sections template: ${toPosix(path11.join(templates, "CLAUDE.section.md"))}`);
   io.out(`aw init in ${root}`);
   io.out(report.map((r) => r.startsWith("  ") ? r : `- ${r}`).join("\n"));
   io.out("\nNext: fill the TODOs (docs index `when`, role notes), then run `aw doctor`.");
   return EXIT.OK;
 }
 
-// src/commands/role.ts
-import * as fs10 from "node:fs";
+// src/commands/refine.ts
+import * as fs13 from "node:fs";
+import * as path15 from "node:path";
+
+// src/core/refinementNext.ts
 import * as path12 from "node:path";
 
+// src/core/refinementRender.ts
+var listOrNone = (values) => values.length ? values.join(", ") : "none";
+function itemsTable(revision) {
+  return [
+    "| Item | Title | Depends on | Mode | Criteria | Prerequisite |",
+    "|---|---|---|---|---|---|",
+    ...revision.items.map(
+      (item) => `| ${item.id} | ${item.title} | ${listOrNone(item.dependsOn)} | ${item.suggestedMode} | ${item.acceptanceCriteria.length} | ${item.prerequisiteFor ? "yes" : ""} |`
+    )
+  ];
+}
+function itemDetails(item) {
+  const out = [
+    `### ${item.id} \xB7 ${item.title}`,
+    "",
+    `**Goal:** ${item.goal}`,
+    "",
+    "**Scope:**",
+    ...item.scope.map((entry) => `- ${entry}`),
+    "",
+    "**Acceptance criteria (draft):**",
+    ...item.acceptanceCriteria.map((criterion) => `- ${criterion}`),
+    "",
+    `**Depends on:** ${listOrNone(item.dependsOn)}`
+  ];
+  if (item.prerequisiteFor) out.push(`**Prerequisite for:** ${item.prerequisiteFor}`);
+  out.push(`**Suggested mode:** ${item.suggestedMode} \u2014 ${item.modeReason}`);
+  if (item.touches.length) out.push(`**Likely affected:** ${item.touches.join(", ")}`);
+  if (item.risks.length) out.push(`**Risks:** ${item.risks.join("; ")}`);
+  return out;
+}
+function renderProposal(s, revision) {
+  const out = [
+    `# Refinement \xB7 ${s.title}`,
+    "",
+    `Refinement: ${s.id} \xB7 revision ${revision.revision} \xB7 ${revision.at}`,
+    "",
+    "<!-- Generated by aw from the product owner's proposal. Ask for changes with `aw refine note` instead of editing this file. -->",
+    "",
+    "## Summary",
+    revision.summary,
+    "",
+    "## Items",
+    ...itemsTable(revision)
+  ];
+  for (const item of revision.items) out.push("", ...itemDetails(item));
+  out.push("", "## Coverage of the slice description", ...revision.coverage.map((entry) => `- ${entry.requirement} \u2192 ${entry.items.join(", ")}`));
+  if (revision.outOfScope.length) out.push("", "## Out of scope", ...revision.outOfScope.map((entry) => `- ${entry}`));
+  if (revision.openQuestions.length) out.push("", "## Open questions", ...revision.openQuestions.map((entry) => `- ${entry}`));
+  if (revision.addressedNotes.length) {
+    out.push("", "## Answers to the user's notes", ...revision.addressedNotes.map((answer) => `- ${answer.noteId}: ${answer.note}`));
+  }
+  return `${out.join("\n")}
+`;
+}
+function renderRefinementBriefing(ctx, s, ref, run2) {
+  const paths = refinementPaths(ref);
+  const previous = s.revisions.at(-1);
+  const out = [
+    `# Briefing \xB7 product owner \xB7 refinement ${s.id}`,
+    "",
+    `Refinement: ${s.id} \xB7 ${s.title} \xB7 run ${run2.id} \xB7 this will be revision ${s.revisions.length + 1}`,
+    `Write all free-text fields in: ${ctx.config.language}.`,
+    "",
+    "## Your job",
+    "Split the slice described in the input file into small, vertical, independently deliverable tasks. Each task will later go through the aw pipeline on its own, planned in detail by the scrum-master.",
+    "",
+    `1. Read the slice: ${rel(ctx, paths.input)}`,
+    "2. Explore what you need in the repository with Read, Grep and Glob: the documentation index below, the modules the slice touches, the test layout.",
+    `3. Write your proposal as JSON to ${rel(ctx, paths.proposal)} with the Write tool. It is the only file you may write.`,
+    "4. Run `aw refine submit`. If it reports errors, fix the file and run it again.",
+    `5. Reply with ONE line, e.g. "product-owner ${run2.id}: proposed 4 items".`,
+    "",
+    "## Limits",
+    `- At most ${ctx.config.refine.maxCriteriaPerItem} acceptance criteria per item: split bigger items.`,
+    `- At most ${ctx.config.refine.maxItems} items: for a bigger slice, propose in \`summary\` how to split it into smaller slices.`
+  ];
+  const notes = s.notes.filter((note) => run2.consumedNotes.includes(note.id));
+  if (notes.length) {
+    out.push("", "## Must address (each needs an entry in addressedNotes)", ...notes.map((note) => `- ${note.id}: ${note.text}`));
+  }
+  if (previous) {
+    out.push(
+      "",
+      `## Previous proposal (revision ${previous.revision}) \u2014 the user asked for changes`,
+      ...itemsTable(previous),
+      "",
+      `Full text: ${rel(ctx, paths.proposalView)}. Keep the items the notes don't touch unchanged: same titles and order.`
+    );
+  }
+  if (ctx.config.docs.length) {
+    out.push("", "## Documentation index", ...ctx.config.docs.map((doc) => `- ${doc.path} \u2014 ${doc.when}`));
+  }
+  out.push("", "Project instructions (CLAUDE.md) are already in your context.");
+  const repositoryNotes = readRoleNotes(ctx, "product-owner");
+  if (repositoryNotes) out.push("", "## Repository notes for the product owner", repositoryNotes);
+  const schema = external_exports.toJSONSchema(RefineOutput, { io: "input", unrepresentable: "any" });
+  out.push(
+    "",
+    "## Output format (`aw schema refine` prints the same)",
+    "Fields with defaults may be omitted; unknown fields are rejected.",
+    "",
+    "```json",
+    JSON.stringify(schema, null, 2),
+    "```",
+    "",
+    "Example:",
+    "",
+    "```json",
+    JSON.stringify(EXAMPLES.refine, null, 2),
+    "```"
+  );
+  return `${out.join("\n")}
+`;
+}
+function itemFileName(item) {
+  return `${String(item.position).padStart(2, "0")}-${slugify2(item.title)}.md`;
+}
+function renderItem(s, revision, item) {
+  const titleOf = new Map(revision.items.map((other) => [other.id, other.title]));
+  const dependencies = item.dependsOn.map((id) => `${id} ${titleOf.get(id) ?? ""}`.trim());
+  const out = [
+    `<!-- aw: refinement ${s.id}, item ${item.id} (${item.position} of ${revision.items.length}) -->`,
+    `# ${item.title}`,
+    "",
+    `**Goal:** ${item.goal}`,
+    "",
+    "**Scope:**",
+    ...item.scope.map((entry) => `- ${entry}`),
+    "",
+    "**Acceptance criteria (draft, refine them in the plan):**",
+    ...item.acceptanceCriteria.map((criterion) => `- ${criterion}`),
+    "",
+    `**Depends on:** ${dependencies.length ? dependencies.join("; ") : "none"}`
+  ];
+  if (item.prerequisiteFor) out.push(`**Prerequisite for:** ${item.prerequisiteFor}`);
+  out.push(`**Suggested mode:** ${item.suggestedMode} \u2014 ${item.modeReason}`);
+  if (item.touches.length) out.push(`**Likely affected:** ${item.touches.join(", ")}`);
+  if (item.risks.length) out.push(`**Risks:** ${item.risks.join("; ")}`);
+  out.push(
+    "",
+    "## Context: the whole slice",
+    revision.summary,
+    "",
+    ...revision.items.map(
+      (other) => other.id === item.id ? `${other.position}. **${other.id} ${other.title}** \u2190 this task` : `${other.position}. ${other.id} ${other.title}`
+    )
+  );
+  const fromDescription = revision.coverage.filter((entry) => entry.items.includes(item.id));
+  if (fromDescription.length) {
+    out.push("", "## From the slice description", ...fromDescription.map((entry) => `> ${entry.requirement}`));
+  }
+  return `${out.join("\n")}
+`;
+}
+
+// src/core/refinementNext.ts
+function intakeAction() {
+  return {
+    kind: "intake",
+    lines: [
+      "No refinement waits for a step. Get the slice description from the user (message or file), then:",
+      '`aw refine new --title "<short title>" [--id <id>] [--input <file>]`'
+    ]
+  };
+}
+function chooseAction(inProgress) {
+  return {
+    kind: "choose",
+    lines: [
+      "Several refinements wait for a step. Ask the user which one, then run `aw refine next <id>`:",
+      ...inProgress.map(({ state }) => `- ${state.id} \xB7 ${state.status} \xB7 ${state.title}`)
+    ]
+  };
+}
+function refinementNextAction(ctx, ref, s) {
+  const paths = refinementPaths(ref);
+  switch (s.status) {
+    case "DRAFT": {
+      if (!writtenInput(readTextIfExists(paths.input))) {
+        return {
+          kind: "write-input",
+          lines: [
+            `Write the slice description into ${rel(ctx, paths.input)} VERBATIM, as the user or the ticket gave it. Don't summarize it.`,
+            `Then run \`aw refine next ${s.id}\`.`
+          ]
+        };
+      }
+      const notes = pendingRefinementNotes(s);
+      return {
+        kind: "spawn-po",
+        lines: [
+          `Run \`aw refine start-agent ${s.id}\`. It starts the product owner's run and prints the AGENT and MESSAGE to spawn.`,
+          ...notes.length ? [`The run will have to answer the user's notes: ${notes.map((note) => note.id).join(", ")}.`] : []
+        ]
+      };
+    }
+    case "WORKING": {
+      const run2 = activeRefinementRun(s);
+      return {
+        kind: "recover-agent",
+        lines: [
+          `The product owner's run ${run2?.id ?? "?"} has no accepted proposal yet${run2?.stoppedWithoutSubmit ? " and the agent stopped" : ""}.`,
+          `If the agent has already returned, run \`aw refine reset ${s.id}\`, then \`aw refine start-agent ${s.id}\` for a fresh agent.`
+        ]
+      };
+    }
+    case "PROPOSED": {
+      const revision = latestRevision(s);
+      return {
+        kind: "user-review",
+        lines: [
+          `Show the user the proposal ${rel(ctx, paths.proposalView)} (revision ${revision?.revision ?? "?"}, ${revision?.items.length ?? 0} items): the items table, then open questions, out-of-scope parts, and anything the coverage misses.`,
+          "Ask with AskUserQuestion: Approve / Changes / Cancel.",
+          `- Approve: \`aw refine approve ${s.id}\` (the user confirms the prompt).`,
+          `- Changes: one \`aw refine note ${s.id} --text "<remark>"\` per remark, then \`aw refine next ${s.id}\`.`,
+          `- Cancel: \`aw refine cancel ${s.id} --reason "<why>"\`.`
+        ]
+      };
+    }
+    case "APPROVED": {
+      const revision = s.revisions.find((candidate) => candidate.revision === s.approvedRevision);
+      return {
+        kind: "done",
+        lines: [
+          `Approved revision ${s.approvedRevision}. Task files, in delivery order (start each with /aw:scrum-master <file>):`,
+          ...(revision?.items ?? []).map((item) => `- ${rel(ctx, path12.join(paths.items, itemFileName(item)))}`)
+        ]
+      };
+    }
+    case "CANCELLED":
+      return { kind: "cancelled", lines: ["The refinement was cancelled. Nothing to do."] };
+  }
+}
+function formatRefinementNext(s, action) {
+  const head = s ? [`REFINEMENT: ${s.id} \xB7 ${s.title}`, `STATUS: ${s.status}`] : [];
+  return [...head, `NEXT: ${action.kind}`, ...action.lines].join("\n");
+}
+
 // src/core/validate.ts
-import * as fs9 from "node:fs";
-import * as path11 from "node:path";
+import * as fs11 from "node:fs";
+import * as path13 from "node:path";
 function normalizePath(ctx, p, where, errors) {
   const relPath = relativeToRoot(ctx.root, p);
   if (relPath === null) {
@@ -23850,7 +24493,7 @@ function normalizePath(ctx, p, where, errors) {
   }
   return relPath;
 }
-var exists = (ctx, relPath) => fs9.existsSync(path11.join(ctx.root, relPath));
+var exists = (ctx, relPath) => fs11.existsSync(path13.join(ctx.root, relPath));
 function checkAcRefs(s, refs, errors) {
   const known = new Set(acIds(s));
   for (const r of refs) if (!known.has(r.ac)) errors.push(`${r.where}: unknown acceptance criterion ${r.ac} (known: ${[...known].join(", ")})`);
@@ -23956,7 +24599,7 @@ function checkCoder(ctx, s, run2, out) {
     if (!testIds.has(d.testId)) errors.push(`testDisputes: ${d.testId} is not one of the protected tests`);
   }
   for (const p of s.protectedFiles) {
-    if (fileSha256(path11.join(ctx.root, p.path)) !== p.sha256) {
+    if (fileSha256(path13.join(ctx.root, p.path)) !== p.sha256) {
       errors.push(
         `protected test file was modified: ${p.path} \u2014 restore the original from ${p.snapshot}. If you believe the test is wrong, report it in testDisputes instead of changing it.`
       );
@@ -23982,8 +24625,389 @@ function checkCoder(ctx, s, run2, out) {
   }
   return { errors, warnings };
 }
+function checkItemPurpose(out, errors) {
+  const covered = new Set(out.coverage.flatMap((entry) => entry.items));
+  const isNeededByLaterItem = (position) => out.items.some((other, index) => index + 1 > position && other.dependsOn.includes(position));
+  out.items.forEach((item, index) => {
+    const position = index + 1;
+    if (covered.has(position)) return;
+    const where = `items[${index}] ("${item.title}")`;
+    if (!item.prerequisiteFor) {
+      errors.push(
+        `${where} delivers nothing from the slice: list it in coverage, or, if it is a technical prerequisite, set prerequisiteFor and make a later item depend on it`
+      );
+    } else if (!isNeededByLaterItem(position)) {
+      errors.push(`${where} has prerequisiteFor, but no later item lists ${position} in dependsOn`);
+    }
+  });
+}
+function earlierItemsHint(position) {
+  return position > 1 ? `items 1\u2013${position - 1}` : "nothing (it is the first item)";
+}
+function checkRefineOutput(limits, out, assignedNotes) {
+  const errors = [];
+  const itemCount = out.items.length;
+  if (itemCount > limits.maxItems) {
+    errors.push(
+      `items: ${itemCount} items, the limit is ${limits.maxItems} (refine.maxItems). The slice is too big: propose in summary how to split it into smaller slices.`
+    );
+  }
+  const titles = /* @__PURE__ */ new Map();
+  out.items.forEach((item, index) => {
+    const position = index + 1;
+    const where = `items[${index}] ("${item.title}")`;
+    if (item.acceptanceCriteria.length > limits.maxCriteriaPerItem) {
+      errors.push(
+        `${where}: ${item.acceptanceCriteria.length} acceptance criteria, the limit is ${limits.maxCriteriaPerItem} (refine.maxCriteriaPerItem). Split the item.`
+      );
+    }
+    for (const dependency of item.dependsOn) {
+      if (dependency >= position) {
+        errors.push(
+          `${where}.dependsOn: ${dependency} is not an earlier item. Items are listed in delivery order, so this one may depend on ${earlierItemsHint(position)}.`
+        );
+      }
+    }
+    const titleKey = item.title.trim().toLowerCase();
+    const firstWithTitle = titles.get(titleKey);
+    if (firstWithTitle !== void 0) errors.push(`${where}: the same title as item ${firstWithTitle}; titles must be unique`);
+    else titles.set(titleKey, position);
+  });
+  out.coverage.forEach((entry, index) => {
+    for (const reference of entry.items) {
+      if (reference > itemCount) errors.push(`coverage[${index}].items: ${reference} is not an item position (1\u2013${itemCount})`);
+    }
+  });
+  checkItemPurpose(out, errors);
+  const answered = new Set(out.addressedNotes.map((answer) => answer.noteId));
+  for (const noteId of assignedNotes) if (!answered.has(noteId)) errors.push(`addressedNotes: missing ${noteId}`);
+  for (const noteId of answered) if (!assignedNotes.includes(noteId)) errors.push(`addressedNotes: ${noteId} was not assigned to this run`);
+  return errors;
+}
+
+// src/commands/shared.ts
+import { spawnSync as spawnSync3 } from "node:child_process";
+import * as fs12 from "node:fs";
+import * as path14 from "node:path";
+function readInputJson(io, file2) {
+  const abs = path14.resolve(io.cwd, file2);
+  if (!fs12.existsSync(abs)) throw new AwError(`File not found: ${file2}`, EXIT.USAGE);
+  try {
+    return JSON.parse(fs12.readFileSync(abs, "utf8"));
+  } catch (e) {
+    throw new AwError(`${file2} is not valid JSON: ${e.message}`, EXIT.VALIDATION);
+  }
+}
+function parseInput(schema, raw, label, schemaName) {
+  const result = schema.safeParse(raw);
+  if (!result.success) {
+    const lines = formatIssues(result.error).map((l) => `  - ${l}`);
+    throw new AwError(`${label} does not match the schema:
+${lines.join("\n")}`, EXIT.VALIDATION, `See \`aw schema ${schemaName}\`.`);
+  }
+  return result.data;
+}
+function gitInfo(ctx) {
+  const git2 = (...args) => spawnSync3("git", args, { cwd: ctx.root, encoding: "utf8" });
+  const head = git2("rev-parse", "HEAD");
+  const baseRef = head.status === 0 ? head.stdout.trim() : null;
+  const status = git2("status", "--porcelain");
+  const tasksPrefix = ctx.config.paths.tasksDir.replace(/^\.\//, "");
+  const dirty = status.status === 0 && status.stdout.split(/\r?\n/).filter((l) => l.trim()).some((l) => !l.slice(3).startsWith(tasksPrefix));
+  return { baseRef, dirtyAtStart: dirty };
+}
+function list(items, indent = "  - ") {
+  return items.map((i) => `${indent}${i}`).join("\n");
+}
+
+// src/commands/refine.ts
+var PRODUCT_OWNER_AGENT = "aw:product-owner";
+var USAGE = `aw refine <command>
+  new --title "<t>" [--id <id>] [--input <file>]   start a refinement; the slice text goes to input.md
+  next [<id>]                      what to do now
+  start-agent <id>                 start the product owner's run; prints the agent to spawn
+  submit                           (aw:product-owner only) check proposal.json and record it
+  note <id> --text "<remark>"      the user's remark for the next revision
+  approve <id>                     the user approved the split: write the task files (asks the user to confirm)
+  cancel <id> --reason "<r>"       abandon the refinement
+  reset <id>                       discard an unfinished product-owner run
+  show [<id>] [--json]             list the refinements, or one refinement's items`;
+function refineCommand(argv, io) {
+  const [sub, ...rest] = argv;
+  const args = parseArgs(rest, ["json"]);
+  const ctx = loadCtx(io.cwd);
+  switch (sub) {
+    case "new":
+      return refineNew(ctx, args, io);
+    case "next":
+      return refineNext(ctx, args, io);
+    case "start-agent":
+      return refineStartAgent(ctx, args, io);
+    case "submit":
+      return refineSubmit(ctx, io);
+    case "note":
+      return refineNote(ctx, args, io);
+    case "approve":
+      return refineApprove(ctx, args, io);
+    case "cancel":
+      return refineCancel(ctx, args, io);
+    case "reset":
+      return refineReset(ctx, args, io);
+    case "show":
+      return refineShow(ctx, args, io);
+    default:
+      throw new AwError(sub ? `Unknown command: aw refine ${sub}` : "Missing the refine command.", EXIT.USAGE, USAGE);
+  }
+}
+function printNext(ctx, ref, s, io) {
+  io.out(`
+${formatRefinementNext(s, refinementNextAction(ctx, ref, s))}`);
+}
+function refineNew(ctx, args, io) {
+  const usage = 'aw refine new --title "<title>" [--id <id>] [--input <file>]';
+  const title = requireStr(args, "title", usage);
+  const id = str(args, "id") ?? `${today()}-${slugify2(title)}`;
+  if (!RefinementId.safeParse(id).success) throw new AwError(`Invalid refinement id "${id}" (letters, digits, . _ - only).`, EXIT.USAGE);
+  const ref = refinementRef(ctx, id);
+  if (fs13.existsSync(ref.dir)) throw new AwError(`${rel(ctx, ref.dir)} already exists.`, EXIT.USAGE, "Pick another --id or title.");
+  const inputFile = str(args, "input");
+  let input2 = INPUT_PLACEHOLDER;
+  if (inputFile) {
+    const abs = path15.resolve(io.cwd, inputFile);
+    if (!fs13.existsSync(abs)) throw new AwError(`Input file not found: ${inputFile}`, EXIT.USAGE);
+    input2 = fs13.readFileSync(abs, "utf8");
+  }
+  const paths = refinementPaths(ref);
+  ensureDir(ref.dir);
+  fs13.writeFileSync(paths.input, input2, "utf8");
+  const now = nowIso();
+  const s = {
+    schemaVersion: 1,
+    id,
+    title,
+    source: inputFile ? { kind: "file", ref: inputFile } : { kind: "manual" },
+    status: "DRAFT",
+    createdAt: now,
+    updatedAt: now,
+    runs: [],
+    revisions: [],
+    notes: [],
+    history: [],
+    counters: { run: 0, note: 0 }
+  };
+  addRefinementEvent(s, "scrum-master", "refinement_created", inputFile ? `input from ${inputFile}` : void 0);
+  writeRefinement(ref, s);
+  io.out(`Created refinement ${id} in ${rel(ctx, ref.dir)}`);
+  io.out(`Input: ${rel(ctx, paths.input)}${inputFile ? " (copied)" : " \u2014 write the slice description there VERBATIM"}`);
+  printNext(ctx, ref, s, io);
+  return EXIT.OK;
+}
+function refineNext(ctx, args, io) {
+  const id = args.positionals[0];
+  if (id) {
+    const ref = requireRefinement(ctx, id, "aw refine next [<id>]");
+    const s = readRefinement(ref);
+    io.out(formatRefinementNext(s, refinementNextAction(ctx, ref, s)));
+    return EXIT.OK;
+  }
+  const waiting = listRefinements(ctx).map((ref) => ({ ref, state: readRefinement(ref) })).filter(({ state }) => !FINAL_REFINEMENT_STATUSES.includes(state.status));
+  const only = waiting.length === 1 ? waiting[0] : void 0;
+  if (only) io.out(formatRefinementNext(only.state, refinementNextAction(ctx, only.ref, only.state)));
+  else if (waiting.length === 0) io.out(formatRefinementNext(null, intakeAction()));
+  else io.out(formatRefinementNext(null, chooseAction(waiting)));
+  return EXIT.OK;
+}
+function refineStartAgent(ctx, args, io) {
+  const ref = requireRefinement(ctx, args.positionals[0], "aw refine start-agent <id>");
+  const working = findWorkingRefinement(ctx);
+  if (working && working.ref.id !== ref.id) {
+    throw new AwError(
+      `Refinement ${working.ref.id} already has a product owner at work; one agent at a time.`,
+      EXIT.STATUS_MISMATCH,
+      `Wait for it to finish, or discard its run with \`aw refine reset ${working.ref.id}\`.`
+    );
+  }
+  const paths = refinementPaths(ref);
+  const { state, run: run2 } = mutateRefinement(ref, (s) => {
+    requireStatus(s, ["DRAFT"], "start-agent");
+    if (!writtenInput(readTextIfExists(paths.input))) {
+      throw new AwError(`${rel(ctx, paths.input)} is empty. Write the slice description there first.`, EXIT.VALIDATION);
+    }
+    const run3 = { id: nextRefinementId(s, "run", "R"), state: "active", startedAt: nowIso(), consumedNotes: [], stopBlocks: 0 };
+    for (const note of pendingRefinementNotes(s)) {
+      note.consumedByRun = run3.id;
+      run3.consumedNotes.push(note.id);
+    }
+    s.runs.push(run3);
+    s.status = "WORKING";
+    addRefinementEvent(s, "scrum-master", "agent_started", run3.id);
+    return { state: s, run: run3 };
+  });
+  fs13.rmSync(paths.proposal, { force: true });
+  writeFileAtomic(paths.briefing, renderRefinementBriefing(ctx, state, ref, run2));
+  io.out(`Product-owner run ${run2.id} started for refinement ${ref.id}.`);
+  io.out(
+    [
+      `AGENT: ${PRODUCT_OWNER_AGENT}`,
+      `HOW: spawn a fresh ${PRODUCT_OWNER_AGENT} (Agent tool, run_in_background: false).`,
+      `MESSAGE: You are the product owner for refinement ${ref.id} (run ${run2.id}). Read ${rel(ctx, paths.briefing)} first and follow it.`,
+      `AFTER: when the agent returns, run \`aw refine next ${ref.id}\`. Don't act on the agent's reply \u2014 the state is the source of truth.`
+    ].join("\n")
+  );
+  return EXIT.OK;
+}
+function refineSubmit(ctx, io) {
+  const working = findWorkingRefinement(ctx);
+  if (!working) {
+    throw new AwError(
+      "No refinement has an active product-owner run.",
+      EXIT.STATUS_MISMATCH,
+      "Only the aw:product-owner agent submits, after the orchestrator ran `aw refine start-agent <id>`."
+    );
+  }
+  const { ref } = working;
+  const paths = refinementPaths(ref);
+  const proposalFile = rel(ctx, paths.proposal);
+  if (!fs13.existsSync(paths.proposal)) {
+    throw new AwError(`${proposalFile} does not exist. Write your proposal there first (Write tool).`, EXIT.VALIDATION);
+  }
+  const output2 = parseInput(RefineOutput, readInputJson(io, paths.proposal), proposalFile, "refine");
+  const { state, revision } = mutateRefinement(ref, (s) => {
+    requireStatus(s, ["WORKING"], "submit");
+    const run2 = activeRefinementRun(s);
+    if (!run2) throw new AwError(`Refinement ${s.id} has no active run.`, EXIT.STATUS_MISMATCH);
+    const errors = checkRefineOutput(ctx.config.refine, output2, run2.consumedNotes);
+    if (errors.length) {
+      throw new AwError(
+        `${proposalFile} was not accepted:
+${errors.map((error62) => `  - ${error62}`).join("\n")}`,
+        EXIT.VALIDATION,
+        "Fix the file and run `aw refine submit` again."
+      );
+    }
+    const revision2 = toRevision(s, run2, output2);
+    s.revisions.push(revision2);
+    run2.state = "submitted";
+    run2.finishedAt = nowIso();
+    s.status = "PROPOSED";
+    addRefinementEvent(s, "product-owner", "proposal_submitted", `revision ${revision2.revision}, ${revision2.items.length} items`);
+    return { state: s, revision: revision2 };
+  });
+  ensureDir(paths.revisions);
+  fs13.copyFileSync(paths.proposal, path15.join(paths.revisions, `r${revision.revision}.json`));
+  writeFileAtomic(paths.proposalView, renderProposal(state, revision));
+  io.out(
+    `Proposal accepted as revision ${revision.revision} of refinement ${ref.id}: ${revision.items.length} items. Reply with ONE line, e.g. "product-owner ${revision.runId}: proposed ${revision.items.length} items".`
+  );
+  return EXIT.OK;
+}
+function refineNote(ctx, args, io) {
+  const usage = 'aw refine note <id> --text "<remark>"';
+  const ref = requireRefinement(ctx, args.positionals[0], usage);
+  const text = requireStr(args, "text", usage);
+  const note = mutateRefinement(ref, (s) => {
+    requireStatus(s, ["PROPOSED", "DRAFT"], "note");
+    const note2 = { id: nextRefinementId(s, "note", "N"), text, at: nowIso() };
+    s.notes.push(note2);
+    if (s.status === "PROPOSED") s.status = "DRAFT";
+    addRefinementEvent(s, "user", "note_added", note2.id);
+    return note2;
+  });
+  io.out(`Note ${note.id} queued for the next product-owner run of ${ref.id}.`);
+  return EXIT.OK;
+}
+function refineApprove(ctx, args, io) {
+  const ref = requireRefinement(ctx, args.positionals[0], "aw refine approve <id>");
+  const paths = refinementPaths(ref);
+  const { state, revision } = mutateRefinement(ref, (s) => {
+    requireStatus(s, ["PROPOSED"], "approve");
+    const revision2 = latestRevision(s);
+    if (!revision2) throw new AwError(`Refinement ${s.id} has no proposal to approve.`, EXIT.STATUS_MISMATCH);
+    s.approvedRevision = revision2.revision;
+    s.status = "APPROVED";
+    addRefinementEvent(s, "user", "approved", `revision ${revision2.revision}`);
+    return { state: s, revision: revision2 };
+  });
+  ensureDir(paths.items);
+  io.out(`Refinement ${ref.id} approved (revision ${revision.revision}). Task files, in delivery order:`);
+  for (const item of revision.items) {
+    const file2 = path15.join(paths.items, itemFileName(item));
+    writeFileAtomic(file2, renderItem(state, revision, item));
+    io.out(`- ${rel(ctx, file2)}`);
+  }
+  io.out("Start each with `/aw:scrum-master <file>` when you're ready; the files list their dependencies.");
+  return EXIT.OK;
+}
+function refineCancel(ctx, args, io) {
+  const usage = 'aw refine cancel <id> --reason "<why>"';
+  const ref = requireRefinement(ctx, args.positionals[0], usage);
+  const reason = requireStr(args, "reason", usage);
+  mutateRefinement(ref, (s) => {
+    requireStatus(s, ["DRAFT", "WORKING", "PROPOSED"], "cancel");
+    abandonActiveRun(s, `cancelled: ${reason}`);
+    s.status = "CANCELLED";
+    addRefinementEvent(s, "user", "cancelled", reason);
+  });
+  io.out(`Refinement ${ref.id} cancelled.`);
+  return EXIT.OK;
+}
+function refineReset(ctx, args, io) {
+  const ref = requireRefinement(ctx, args.positionals[0], "aw refine reset <id>");
+  const runId = mutateRefinement(ref, (s) => {
+    requireStatus(s, ["WORKING"], "reset");
+    const run2 = activeRefinementRun(s);
+    abandonActiveRun(s, "reset by the orchestrator");
+    s.status = "DRAFT";
+    addRefinementEvent(s, "scrum-master", "agent_reset", run2?.id);
+    return run2?.id ?? "?";
+  });
+  io.out(`Run ${runId} discarded; refinement ${ref.id} is DRAFT again. Start a fresh agent with \`aw refine start-agent ${ref.id}\`.`);
+  return EXIT.OK;
+}
+function refineShow(ctx, args, io) {
+  const id = args.positionals[0];
+  if (!id) {
+    const all = listRefinements(ctx);
+    if (!all.length) {
+      io.out("No refinements yet. Start one with `aw refine new` (or /aw:refine).");
+      return EXIT.OK;
+    }
+    for (const ref2 of all) {
+      const s2 = readRefinement(ref2);
+      const revision = latestRevision(s2);
+      io.out(`${s2.id} \xB7 ${s2.status} \xB7 ${s2.title}${revision ? ` \xB7 revision ${revision.revision}, ${revision.items.length} items` : ""}`);
+    }
+    return EXIT.OK;
+  }
+  const ref = requireRefinement(ctx, id, "aw refine show [<id>] [--json]");
+  const s = readRefinement(ref);
+  if (bool(args, "json")) {
+    io.out(JSON.stringify(s, null, 2));
+    return EXIT.OK;
+  }
+  const paths = refinementPaths(ref);
+  io.out(`${s.id} \xB7 ${s.status} \xB7 ${s.title}`);
+  io.out(`Input: ${rel(ctx, paths.input)}`);
+  const approved = s.revisions.find((revision) => revision.revision === s.approvedRevision);
+  const shown = approved ?? latestRevision(s);
+  if (!shown) {
+    io.out("No proposal yet.");
+  } else {
+    io.out(`Revision ${shown.revision}${approved ? " (approved)" : ""}:`);
+    for (const item of shown.items) {
+      const dependencies = item.dependsOn.length ? `, depends on ${item.dependsOn.join(", ")}` : "";
+      const file2 = approved ? ` \u2192 ${rel(ctx, path15.join(paths.items, itemFileName(item)))}` : "";
+      io.out(`- ${item.id} ${item.title} [${item.suggestedMode}, ${item.acceptanceCriteria.length} criteria${dependencies}]${file2}`);
+    }
+  }
+  const pending = pendingRefinementNotes(s);
+  if (pending.length) io.out(`Notes for the next revision: ${pending.map((note) => `${note.id} ${note.text}`).join("; ")}`);
+  return EXIT.OK;
+}
 
 // src/commands/role.ts
+import * as fs14 from "node:fs";
+import * as path16 from "node:path";
 function roleCommand(role, argv, io) {
   const [sub, ...rest] = argv;
   const ctx = loadCtx(io.cwd);
@@ -24024,7 +25048,7 @@ function start(ctx, role, io) {
       iteration: submittedRuns(s2, role, step.target).length + 1,
       state: "active",
       startedAt: nowIso(),
-      outputFile: rel(ctx, path12.join(taskPaths(ref).out, `${id}-${role}.json`)),
+      outputFile: rel(ctx, path16.join(taskPaths(ref).out, `${id}-${role}.json`)),
       submitAttempts: [],
       testRuns: [],
       gates: [],
@@ -24055,12 +25079,12 @@ function precheck(ctx, ref, role) {
     }
     const errors = [];
     let output2;
-    const abs = path12.join(ctx.root, run2.outputFile);
-    if (!fs10.existsSync(abs)) errors.push(`output file not found: ${run2.outputFile}`);
+    const abs = path16.join(ctx.root, run2.outputFile);
+    if (!fs14.existsSync(abs)) errors.push(`output file not found: ${run2.outputFile}`);
     else {
       let raw;
       try {
-        raw = JSON.parse(fs10.readFileSync(abs, "utf8"));
+        raw = JSON.parse(fs14.readFileSync(abs, "utf8"));
       } catch (e) {
         errors.push(`${run2.outputFile} is not valid JSON: ${e.message}`);
       }
@@ -24103,12 +25127,12 @@ function snapshotProtected(ctx, ref, s) {
   if (!tester?.output) return;
   const files = unique([...tester.output.tests.map((t) => t.file), ...tester.output.supportFiles]);
   const dir = taskPaths(ref).protected;
-  fs10.rmSync(dir, { recursive: true, force: true });
+  fs14.rmSync(dir, { recursive: true, force: true });
   s.protectedFiles = files.map((f) => {
-    const abs = path12.join(ctx.root, f);
-    const snapshot = path12.join(dir, f);
-    ensureDir(path12.dirname(snapshot));
-    fs10.copyFileSync(abs, snapshot);
+    const abs = path16.join(ctx.root, f);
+    const snapshot = path16.join(dir, f);
+    ensureDir(path16.dirname(snapshot));
+    fs14.copyFileSync(abs, snapshot);
     return { path: f, sha256: fileSha256(abs), snapshot: rel(ctx, snapshot) };
   });
   addEvent(s, "reviewer", "tests_protected", `${files.length} file(s) snapshotted`);
@@ -24218,8 +25242,8 @@ function fail(ctx, role, reason, io) {
 }
 
 // src/commands/sm.ts
-import * as fs12 from "node:fs";
-import * as path14 from "node:path";
+import * as fs15 from "node:fs";
+import * as path17 from "node:path";
 
 // src/core/render.ts
 function renderPlan(s, plan) {
@@ -24323,44 +25347,9 @@ function renderReport(s) {
 `;
 }
 
-// src/commands/shared.ts
-import { spawnSync as spawnSync3 } from "node:child_process";
-import * as fs11 from "node:fs";
-import * as path13 from "node:path";
-function readInputJson(io, file2) {
-  const abs = path13.resolve(io.cwd, file2);
-  if (!fs11.existsSync(abs)) throw new AwError(`File not found: ${file2}`, EXIT.USAGE);
-  try {
-    return JSON.parse(fs11.readFileSync(abs, "utf8"));
-  } catch (e) {
-    throw new AwError(`${file2} is not valid JSON: ${e.message}`, EXIT.VALIDATION);
-  }
-}
-function parseInput(schema, raw, label, schemaName) {
-  const result = schema.safeParse(raw);
-  if (!result.success) {
-    const lines = formatIssues(result.error).map((l) => `  - ${l}`);
-    throw new AwError(`${label} does not match the schema:
-${lines.join("\n")}`, EXIT.VALIDATION, `See \`aw schema ${schemaName}\`.`);
-  }
-  return result.data;
-}
-function gitInfo(ctx) {
-  const git2 = (...args) => spawnSync3("git", args, { cwd: ctx.root, encoding: "utf8" });
-  const head = git2("rev-parse", "HEAD");
-  const baseRef = head.status === 0 ? head.stdout.trim() : null;
-  const status = git2("status", "--porcelain");
-  const tasksPrefix = ctx.config.paths.tasksDir.replace(/^\.\//, "");
-  const dirty = status.status === 0 && status.stdout.split(/\r?\n/).filter((l) => l.trim()).some((l) => !l.slice(3).startsWith(tasksPrefix));
-  return { baseRef, dirtyAtStart: dirty };
-}
-function list(items, indent = "  - ") {
-  return items.map((i) => `${indent}${i}`).join("\n");
-}
-
 // src/commands/sm.ts
 var REQUIREMENTS_PLACEHOLDER = "<!-- aw: paste the task text here VERBATIM, exactly as the user / ticket gave it. Do not summarize or rephrase. -->\n";
-var USAGE = `aw sm <command>
+var USAGE2 = `aw sm <command>
   new --title "<t>" [--id <id>] [--mode tdd|light] [--source manual|file|jira] [--ref <r>] [--requirements <file>]
   plan --file <plan.json>          submit / revise the plan (see \`aw schema plan\`)
   approve [--note "<n>"]           user approved the plan (asks the user to confirm)
@@ -24407,7 +25396,7 @@ function smCommand(argv, io) {
     case "repair":
       return smRepair(ctx, io);
     default:
-      throw new AwError(sub ? `Unknown command: aw sm ${sub}` : "Missing sm command.", EXIT.USAGE, USAGE);
+      throw new AwError(sub ? `Unknown command: aw sm ${sub}` : "Missing sm command.", EXIT.USAGE, USAGE2);
   }
 }
 function expectStatus(s, allowed, action) {
@@ -24415,7 +25404,7 @@ function expectStatus(s, allowed, action) {
     throw new AwError(`Cannot ${action} in status ${s.status} (allowed: ${allowed.join(", ")}).`, EXIT.STATUS_MISMATCH, "Run `aw sm next`.");
   }
 }
-function printNext(ctx, s, io) {
+function printNext2(ctx, s, io) {
   io.out(`
 ${formatNext(s, nextAction(ctx, s))}`);
 }
@@ -24437,18 +25426,18 @@ function smNew(ctx, args, io) {
   const kind = str(args, "source") ?? (reqFile ? "file" : "manual");
   if (!["manual", "file", "jira"].includes(kind)) throw new AwError("--source must be manual, file or jira.", EXIT.USAGE);
   const sourceRef = str(args, "ref") ?? reqFile;
-  const ref = { id, dir: path14.join(ctx.activeDir, id) };
-  if (fs12.existsSync(ref.dir)) throw new AwError(`${rel(ctx, ref.dir)} already exists.`);
+  const ref = { id, dir: path17.join(ctx.activeDir, id) };
+  if (fs15.existsSync(ref.dir)) throw new AwError(`${rel(ctx, ref.dir)} already exists.`);
   const p = taskPaths(ref);
   ensureDir(p.out);
   ensureDir(p.logs);
   let requirements = REQUIREMENTS_PLACEHOLDER;
   if (reqFile) {
-    const abs = path14.resolve(io.cwd, reqFile);
-    if (!fs12.existsSync(abs)) throw new AwError(`Requirements file not found: ${reqFile}`, EXIT.USAGE);
-    requirements = fs12.readFileSync(abs, "utf8");
+    const abs = path17.resolve(io.cwd, reqFile);
+    if (!fs15.existsSync(abs)) throw new AwError(`Requirements file not found: ${reqFile}`, EXIT.USAGE);
+    requirements = fs15.readFileSync(abs, "utf8");
   }
-  fs12.writeFileSync(p.requirements, requirements, "utf8");
+  fs15.writeFileSync(p.requirements, requirements, "utf8");
   const now = nowIso();
   const s = {
     schemaVersion: 1,
@@ -24475,7 +25464,7 @@ function smNew(ctx, args, io) {
   io.out(`Requirements: ${rel(ctx, p.requirements)}${reqFile ? " (copied)" : " \u2014 write the task text there VERBATIM"}`);
   if (s.git.baseRef === null) io.out("Warning: no git HEAD found \u2014 reviewers will rely on the coder's file list.");
   if (s.git.dirtyAtStart) io.out("Warning: the working tree has uncommitted changes; they will mix with the task's changes in `git diff`.");
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smPlan(ctx, args, io) {
@@ -24519,7 +25508,7 @@ function smPlan(ctx, args, io) {
   const plan = s.plans.at(-1);
   io.out(`Plan revision ${plan.revision} saved \u2192 ${rel(ctx, p.plan)} (mode ${plan.mode})`);
   io.out(list(plan.acceptanceCriteria.map((a) => `${a.id}: ${a.text}`)));
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smApprove(ctx, args, io) {
@@ -24531,7 +25520,7 @@ function smApprove(ctx, args, io) {
     return s2;
   });
   io.out(`Plan revision ${s.approvedPlanRevision} approved.`);
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smNext(ctx, io) {
@@ -24553,7 +25542,7 @@ function smNote(ctx, args, io) {
   io.out(`Note ${note.id} queued for the next ${role.data} run.`);
   return EXIT.OK;
 }
-function abandonActiveRun(s, reason) {
+function abandonActiveRun2(s, reason) {
   const run2 = activeRun(s);
   if (!run2) return;
   run2.state = "abandoned";
@@ -24564,12 +25553,12 @@ function abandonActiveRun(s, reason) {
 function smBlock(ctx, args, io) {
   const reason = requireStr(args, "reason", 'aw sm block --reason "<why>"');
   const s = mutate(requireActiveTask(ctx), (s2) => {
-    abandonActiveRun(s2, `blocked: ${reason}`);
+    abandonActiveRun2(s2, `blocked: ${reason}`);
     transition(s2, "BLOCKED", "scrum-master", reason);
     return s2;
   });
   io.out(`Task ${s.id} blocked.`);
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smUnblock(ctx, args, io) {
@@ -24586,18 +25575,18 @@ function smUnblock(ctx, args, io) {
     return s2;
   });
   io.out(`Unblocked \u2192 ${s.status}.`);
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smCancel(ctx, args, io) {
   const reason = requireStr(args, "reason", 'aw sm cancel --reason "<why>"');
   const s = mutate(requireActiveTask(ctx), (s2) => {
-    abandonActiveRun(s2, `cancelled: ${reason}`);
+    abandonActiveRun2(s2, `cancelled: ${reason}`);
     transition(s2, "CANCELLED", "user", reason);
     return s2;
   });
   io.out(`Task ${s.id} cancelled.`);
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smReset(ctx, args, io) {
@@ -24606,12 +25595,12 @@ function smReset(ctx, args, io) {
     const step = r?.phase === "working" ? stepForWorking(r.role, s2.status) : void 0;
     if (!r || !step) throw new AwError(`Nothing to reset: status ${s2.status} is not an agent's working status.`, EXIT.STATUS_MISMATCH);
     const run2 = activeRun(s2);
-    abandonActiveRun(s2, str(args, "note") ?? "reset by orchestrator");
+    abandonActiveRun2(s2, str(args, "note") ?? "reset by orchestrator");
     transition(s2, step.ready, "scrum-master", str(args, "note") ?? `run ${run2?.id ?? "?"} reset`);
     return s2;
   });
   io.out(`Reset \u2192 ${s.status}.`);
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smDocs(ctx, args, io) {
@@ -24631,7 +25620,7 @@ function smDocs(ctx, args, io) {
     return s2;
   });
   io.out(`Docs check recorded (${input2.verdict}).`);
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smAccept(ctx, args, io) {
@@ -24642,7 +25631,7 @@ function smAccept(ctx, args, io) {
     return s2;
   });
   io.out(`Task ${s.id} accepted.`);
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function smReopen(ctx, args, io) {
@@ -24664,13 +25653,13 @@ function smReopen(ctx, args, io) {
     return s2;
   });
   io.out(`Reopened \u2192 ${s.status}.`);
-  printNext(ctx, s, io);
+  printNext2(ctx, s, io);
   return EXIT.OK;
 }
 function archiveName(ctx, id) {
   const base = /^\d{4}-\d{2}-\d{2}/.test(id) ? id : `${today()}_${id}`;
   let name = base;
-  for (let i = 2; fs12.existsSync(path14.join(ctx.archiveDir, name)); i++) name = `${base}-${i}`;
+  for (let i = 2; fs15.existsSync(path17.join(ctx.archiveDir, name)); i++) name = `${base}-${i}`;
   return name;
 }
 function collectBacklog(s, retroImprovements) {
@@ -24704,8 +25693,8 @@ function smArchive(ctx, args, io) {
   }
   writeBacklog(ctx, backlog);
   ensureDir(ctx.archiveDir);
-  const dest = path14.join(ctx.archiveDir, archiveName(ctx, s.id));
-  fs12.renameSync(ref.dir, dest);
+  const dest = path17.join(ctx.archiveDir, archiveName(ctx, s.id));
+  fs15.renameSync(ref.dir, dest);
   io.out(`Archived ${s.id} \u2192 ${rel(ctx, dest)} (report.md inside).`);
   if (added.length) io.out(`${added.length} item(s) added to the backlog \u2014 \`aw backlog\`.`);
   if (!retro) io.out("No retro recorded. Next time pass --retro <retro.json> (see `aw schema retro`).");
@@ -24723,8 +25712,8 @@ function smRepair(ctx, io) {
 }
 
 // src/commands/test.ts
-import * as path15 from "node:path";
-var USAGE2 = 'aw test [<test file>...] [-t "<test name pattern>"]';
+import * as path18 from "node:path";
+var USAGE3 = 'aw test [<test file>...] [-t "<test name pattern>"]';
 var TAIL_ON_PASS = 12;
 var TAIL_ON_FAIL = 60;
 function testCommand(argv, io) {
@@ -24739,15 +25728,15 @@ function testCommand(argv, io) {
     return relPath;
   });
   if (!files.length) {
-    if (!state) throw new AwError("No active task, so there are no task test files.", EXIT.USAGE, `Pass files explicitly: ${USAGE2}`);
+    if (!state) throw new AwError("No active task, so there are no task test files.", EXIT.USAGE, `Pass files explicitly: ${USAGE3}`);
     files = taskTestFiles(ctx, state);
-    if (!files.length) throw new AwError("This task has no test files yet.", EXIT.USAGE, `Pass files explicitly: ${USAGE2}`);
+    if (!files.length) throw new AwError("This task has no test files yet.", EXIT.USAGE, `Pass files explicitly: ${USAGE3}`);
   }
   const command = buildTestCommand(ctx.config, files, pattern);
   const run2 = state ? activeRun(state) : void 0;
-  const logsDir = ref ? taskPaths(ref).logs : path15.join(ctx.tasksDir, "logs");
+  const logsDir = ref ? taskPaths(ref).logs : path18.join(ctx.tasksDir, "logs");
   ensureDir(logsDir);
-  const res = execLogged(ctx, command, path15.join(logsDir, `${run2?.id ?? "task"}-test-${Date.now()}.log`));
+  const res = execLogged(ctx, command, path18.join(logsDir, `${run2?.id ?? "task"}-test-${Date.now()}.log`));
   if (ref && run2) {
     try {
       mutate(ref, (s) => {
@@ -24780,7 +25769,7 @@ function testCommand(argv, io) {
 }
 
 // src/main.ts
-var VERSION = "0.1.0";
+var VERSION = "0.2.0";
 var HELP = `aw ${VERSION} \u2014 task pipeline for Claude Code (scrum-master \xB7 tester \xB7 reviewer \xB7 coder)
 
 Orchestrator (main session):
@@ -24792,6 +25781,9 @@ Agents (each only its own):
   aw tester|reviewer|coder fail --reason "<why>"
 Tests:
   aw test [<file>...] [-t "<name>"]  run this task's test files (or the given ones), narrowly, compact output
+Splitting a larger feature into tasks (before the pipeline):
+  aw refine new | next | start-agent | note | approve | cancel | reset | show
+  aw refine submit                (aw:product-owner only) check and record its proposal
 Info:
   aw show [--json] [--task <archived-id>]
   aw schema <plan|tester|reviewer|coder|docs|retro|config|state>
@@ -24811,6 +25803,8 @@ function run(argv, io) {
         return roleCommand(Role.parse(cmd), rest, io);
       case "test":
         return testCommand(rest, io);
+      case "refine":
+        return refineCommand(rest, io);
       case "show":
         return showCommand(rest, io);
       case "schema":
@@ -24853,7 +25847,7 @@ function run(argv, io) {
 var code = run(process.argv.slice(2), {
   cwd: process.cwd(),
   env: process.env,
-  readStdin: () => fs13.readFileSync(0, "utf8"),
+  readStdin: () => fs16.readFileSync(0, "utf8"),
   out: (text) => process.stdout.write(`${text}
 `),
   err: (text) => process.stderr.write(`${text}

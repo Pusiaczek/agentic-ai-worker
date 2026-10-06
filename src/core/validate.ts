@@ -5,7 +5,8 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { type CoderOutput, isBlocking, type ReviewerOutput, type TesterOutput } from "../schema/outputs";
+import type { Config } from "../schema/config";
+import { type CoderOutput, isBlocking, type RefineOutput, type ReviewerOutput, type TesterOutput } from "../schema/outputs";
 import type { ReviewerRun, Run, TaskState } from "../schema/state";
 import type { ReviewTarget } from "../schema/status";
 import { fileSha256, relativeToRoot } from "../util/fsx";
@@ -185,4 +186,78 @@ export function checkCoder(ctx: Ctx, s: TaskState, run: Run, out: CoderOutput): 
     if (!exists(ctx, t.file)) errors.push(`testsAdded: file not found: ${t.file}`);
   }
   return { errors, warnings };
+}
+
+// ---------------------------------------------------------------- product owner (refinement)
+
+/** Every item must deliver something from the slice, or prepare a later item that does. */
+function checkItemPurpose(out: RefineOutput, errors: string[]): void {
+  const covered = new Set(out.coverage.flatMap((entry) => entry.items));
+  const isNeededByLaterItem = (position: number) =>
+    out.items.some((other, index) => index + 1 > position && other.dependsOn.includes(position));
+  out.items.forEach((item, index) => {
+    const position = index + 1;
+    if (covered.has(position)) return;
+    const where = `items[${index}] ("${item.title}")`;
+    if (!item.prerequisiteFor) {
+      errors.push(
+        `${where} delivers nothing from the slice: list it in coverage, or, if it is a technical prerequisite, set prerequisiteFor and make a later item depend on it`,
+      );
+    } else if (!isNeededByLaterItem(position)) {
+      errors.push(`${where} has prerequisiteFor, but no later item lists ${position} in dependsOn`);
+    }
+  });
+}
+
+/** "An item may depend only on items before it", phrased for the item at `position`. */
+function earlierItemsHint(position: number): string {
+  return position > 1 ? `items 1–${position - 1}` : "nothing (it is the first item)";
+}
+
+/**
+ * Checks a product owner's proposal beyond its schema: delivery order, size limits, unique titles,
+ * coverage, and answers to the notes assigned to the run.
+ */
+export function checkRefineOutput(limits: Config["refine"], out: RefineOutput, assignedNotes: readonly string[]): string[] {
+  const errors: string[] = [];
+  const itemCount = out.items.length;
+  if (itemCount > limits.maxItems) {
+    errors.push(
+      `items: ${itemCount} items, the limit is ${limits.maxItems} (refine.maxItems). The slice is too big: propose in summary how to split it into smaller slices.`,
+    );
+  }
+
+  const titles = new Map<string, number>();
+  out.items.forEach((item, index) => {
+    const position = index + 1;
+    const where = `items[${index}] ("${item.title}")`;
+    if (item.acceptanceCriteria.length > limits.maxCriteriaPerItem) {
+      errors.push(
+        `${where}: ${item.acceptanceCriteria.length} acceptance criteria, the limit is ${limits.maxCriteriaPerItem} (refine.maxCriteriaPerItem). Split the item.`,
+      );
+    }
+    for (const dependency of item.dependsOn) {
+      if (dependency >= position) {
+        errors.push(
+          `${where}.dependsOn: ${dependency} is not an earlier item. Items are listed in delivery order, so this one may depend on ${earlierItemsHint(position)}.`,
+        );
+      }
+    }
+    const titleKey = item.title.trim().toLowerCase();
+    const firstWithTitle = titles.get(titleKey);
+    if (firstWithTitle !== undefined) errors.push(`${where}: the same title as item ${firstWithTitle}; titles must be unique`);
+    else titles.set(titleKey, position);
+  });
+
+  out.coverage.forEach((entry, index) => {
+    for (const reference of entry.items) {
+      if (reference > itemCount) errors.push(`coverage[${index}].items: ${reference} is not an item position (1–${itemCount})`);
+    }
+  });
+  checkItemPurpose(out, errors);
+
+  const answered = new Set(out.addressedNotes.map((answer) => answer.noteId));
+  for (const noteId of assignedNotes) if (!answered.has(noteId)) errors.push(`addressedNotes: missing ${noteId}`);
+  for (const noteId of answered) if (!assignedNotes.includes(noteId)) errors.push(`addressedNotes: ${noteId} was not assigned to this run`);
+  return errors;
 }

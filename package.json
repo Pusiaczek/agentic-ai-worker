@@ -1,6 +1,6 @@
 {
   "name": "agentic-ai-worker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Marketplace + source of the aw Claude Code plugin (scrum-master orchestrated coder/tester/reviewer pipeline)",
   "type": "module",

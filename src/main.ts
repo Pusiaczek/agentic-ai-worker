@@ -1,6 +1,7 @@
 import { hookCommand } from "./commands/hook";
 import { backlogCommand, doctorCommand, schemaCommand, showCommand, statsCommand } from "./commands/info";
 import { initCommand } from "./commands/init";
+import { refineCommand } from "./commands/refine";
 import { roleCommand } from "./commands/role";
 import { smCommand } from "./commands/sm";
 import { testCommand } from "./commands/test";
@@ -8,7 +9,7 @@ import type { Io } from "./io";
 import { Role } from "./schema/status";
 import { AwError, EXIT } from "./util/errors";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 
 const HELP = `aw ${VERSION} — task pipeline for Claude Code (scrum-master · tester · reviewer · coder)
 
@@ -21,6 +22,9 @@ Agents (each only its own):
   aw tester|reviewer|coder fail --reason "<why>"
 Tests:
   aw test [<file>...] [-t "<name>"]  run this task's test files (or the given ones), narrowly, compact output
+Splitting a larger feature into tasks (before the pipeline):
+  aw refine new | next | start-agent | note | approve | cancel | reset | show
+  aw refine submit                (aw:product-owner only) check and record its proposal
 Info:
   aw show [--json] [--task <archived-id>]
   aw schema <plan|tester|reviewer|coder|docs|retro|config|state>
@@ -38,6 +42,7 @@ export function run(argv: string[], io: Io): number {
       case "reviewer":
       case "coder": return roleCommand(Role.parse(cmd), rest, io);
       case "test": return testCommand(rest, io);
+      case "refine": return refineCommand(rest, io);
       case "show": return showCommand(rest, io);
       case "schema": return schemaCommand(rest, io);
       case "backlog": return backlogCommand(rest, io);

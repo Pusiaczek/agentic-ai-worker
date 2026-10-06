@@ -17,7 +17,7 @@ import { EXIT } from "../util/errors";
 import { ensureDir, readTextIfExists, toPosix, writeFileAtomic } from "../util/fsx";
 
 /** Templates copied into `.claude/aw/`: notes per role, plus repository code standards shared by all agents. */
-const REPO_NOTE_FILES = ["coder", "tester", "reviewer", "scrum-master", "code-standards"];
+const REPO_NOTE_FILES = ["coder", "tester", "reviewer", "scrum-master", "product-owner", "code-standards"];
 
 interface Detected {
   commands: Record<string, string>;

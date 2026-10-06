@@ -286,7 +286,7 @@ export function doctorCommand(_argv: string[], io: Io): number {
   }
   if (!ctx.config.docs.length) warn("docs index is empty — the docs check will have nothing to compare against");
 
-  for (const name of [...Role.options, "scrum-master"]) {
+  for (const name of [...Role.options, "scrum-master", "product-owner"]) {
     const file = path.join(ctx.roleNotesDir, `${name}.md`);
     if (!fs.existsSync(file)) warn(`role notes missing: ${rel(ctx, file)}`);
     else if (!readRoleNotes(ctx, name)) warn(`role notes are still an empty template: ${rel(ctx, file)}`);

@@ -113,4 +113,50 @@ export const EXAMPLES: Record<InputSchemaName, unknown> = {
     wentWrong: ["Plan contract did not specify the 429 body; the tester had to guess."],
     processImprovements: ["Plan template: always specify error response shapes in the contract."],
   },
+  refine: {
+    summary:
+      "Users module: a walking skeleton first (create and read one user end to end), then listing. The test database comes first because every item's tests need it. Editing and deleting are a later phase.",
+    items: [
+      {
+        title: "Test database for integration tests",
+        goal: "Integration tests run against a real Postgres with a clean database per test file.",
+        scope: ["docker compose service for the test database", "migrations applied before the tests", "tables emptied between tests"],
+        acceptanceCriteria: ["`npm test` runs the integration tests against the test database and leaves it empty afterwards."],
+        suggestedMode: "light",
+        modeReason: "Configuration only, no user-visible behavior.",
+        touches: ["docker-compose.yml", "test/setup.ts"],
+        prerequisiteFor: "Items 2 and 3 test their endpoints against the database.",
+      },
+      {
+        title: "Create a user and read it back",
+        goal: "POST /users creates a user and GET /users/:id returns it.",
+        scope: ["users table and migration", "POST /users with validation", "GET /users/:id"],
+        acceptanceCriteria: [
+          "POST /users with a valid email and name returns 201 and the stored user.",
+          "POST /users with an email already used by an active user returns 409.",
+          "GET /users/:id returns 404 for an unknown id.",
+        ],
+        dependsOn: [1],
+        suggestedMode: "tdd",
+        modeReason: "New behavior with error cases.",
+        touches: ["src/routes/users.ts", "src/db/schema.ts"],
+      },
+      {
+        title: "List users with paging",
+        goal: "GET /users returns users newest first, in pages.",
+        scope: ["GET /users with limit and offset", "total count"],
+        acceptanceCriteria: ["GET /users returns at most `limit` users, newest first, with the total count."],
+        dependsOn: [2],
+        suggestedMode: "tdd",
+        modeReason: "New endpoint with paging rules.",
+        risks: ["Stable order when two users have the same creation time."],
+      },
+    ],
+    coverage: [
+      { requirement: "Users can be created and fetched by id.", items: [2] },
+      { requirement: "The list of users is paged.", items: [3] },
+    ],
+    outOfScope: ["Editing and deleting users: the slice text mentions them only as a later phase."],
+    openQuestions: ["Should the list include soft-deleted users for admins?"],
+  },
 };

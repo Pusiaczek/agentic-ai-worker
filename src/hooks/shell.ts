@@ -70,6 +70,10 @@ export function findAwInvocations(command: string): AwInvocation[] {
 
 const STATE_WRITE = /(>|\btee\b|\bmv\b|\bcp\b|\brm\b|\bsed\s+-i|\bperl\s+-i|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|writeFile|\bdel\b|\bcopy\b|\bmove\b)/i;
 
+/**
+ * True when a shell command may write a file only the CLI writes: state.json, refinement.json or their seals.
+ * A heuristic: the file is mentioned and the command contains any write operation.
+ */
 export function writesStateFile(command: string): boolean {
-  return /state\.(json|sha256)\b/.test(command) && STATE_WRITE.test(command);
+  return /(state|refinement)\.(json|sha256)\b/.test(command) && STATE_WRITE.test(command);
 }

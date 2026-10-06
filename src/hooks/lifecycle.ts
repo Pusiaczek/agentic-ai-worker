@@ -4,14 +4,58 @@
  */
 import { addEvent, runsOf } from "../core/machine";
 import { recoverMessage } from "../core/next";
-import type { Ctx } from "../core/project";
+import { type Ctx, rel } from "../core/project";
+import { activeRefinementRun, addRefinementEvent } from "../core/refinementMachine";
+import { findWorkingRefinement, mutateRefinement, refinementPaths } from "../core/refinementStore";
 import { findActiveTask, mutate, readState } from "../core/store";
 import { nowIso } from "../util/fsx";
 import type { HookInput } from "./guards";
 import { identify } from "./identity";
 
+/** The product owner learns which refinement it works on, and its agent id is recorded on the run. */
+function productOwnerStart(ctx: Ctx, input: HookInput): string {
+  const working = findWorkingRefinement(ctx);
+  if (!working) {
+    return "aw: no refinement has an active product-owner run, so there is nothing to refine. Reply in one line that the orchestrator must run `aw refine start-agent <id>` first, and stop.";
+  }
+  const run = mutateRefinement(working.ref, (s) => {
+    const active = activeRefinementRun(s);
+    if (active && input.agent_id && !active.agentId) {
+      active.agentId = input.agent_id;
+      addRefinementEvent(s, "hook", "agent_spawned", input.agent_id);
+    }
+    return active;
+  });
+  const paths = refinementPaths(working.ref);
+  return `aw: you are aw:product-owner for refinement ${working.ref.id} (run ${run?.id ?? "?"}). Read ${rel(ctx, paths.briefing)} first. Write only ${rel(ctx, paths.proposal)}, then run \`aw refine submit\`.`;
+}
+
+/** Keeps the product owner from stopping before an accepted `aw refine submit`, up to limits.stopBlocks times. */
+function productOwnerStop(ctx: Ctx, input: HookInput): { decision: "block"; reason: string } | null {
+  const working = findWorkingRefinement(ctx);
+  if (!working) return null;
+  const proposal = rel(ctx, refinementPaths(working.ref).proposal);
+  return mutateRefinement(working.ref, (s) => {
+    const run = activeRefinementRun(s);
+    if (!run || (run.agentId && input.agent_id && run.agentId !== input.agent_id)) return null;
+    if (input.agent_transcript_path) run.transcriptPath = input.agent_transcript_path;
+    if (run.stopBlocks < ctx.config.limits.stopBlocks) {
+      run.stopBlocks += 1;
+      addRefinementEvent(s, "hook", "stop_blocked", run.id);
+      return {
+        decision: "block" as const,
+        reason: `You haven't submitted a proposal yet. Write it to ${proposal} and run \`aw refine submit\`; if it reports errors, fix the file and run it again. Then reply in one line.`,
+      };
+    }
+    run.stoppedWithoutSubmit = true;
+    addRefinementEvent(s, "hook", "agent_stopped_without_submit", run.id);
+    return null;
+  });
+}
+
 export function subagentStart(ctx: Ctx, input: HookInput): string | null {
   const who = identify(input.agent_type);
+  if (who.kind === "product-owner") return productOwnerStart(ctx, input);
   if (who.kind !== "role") return null;
   const ref = findActiveTask(ctx);
   if (!ref) return `aw: there is no active task — \`aw ${who.role} start\` will fail. Report that in one line and stop.`;
@@ -26,6 +70,7 @@ export function subagentStart(ctx: Ctx, input: HookInput): string | null {
 
 export function subagentStop(ctx: Ctx, input: HookInput): { decision: "block"; reason: string } | null {
   const who = identify(input.agent_type);
+  if (who.kind === "product-owner") return productOwnerStop(ctx, input);
   if (who.kind !== "role") return null;
   const ref = findActiveTask(ctx);
   if (!ref) return null;
@@ -67,11 +112,16 @@ export function subagentStop(ctx: Ctx, input: HookInput): { decision: "block"; r
 export function afterAgentCall(ctx: Ctx, input: HookInput): string | null {
   const tool = input.tool_name ?? "";
   const ti = input.tool_input ?? {};
+  const spawnsAgent = tool === "Agent" || tool === "Task";
+  const calledAgent = identify(String(ti.subagent_type ?? ""));
+  if (spawnsAgent && calledAgent.kind === "product-owner") {
+    return "aw: run `aw refine next` — don't rely on the product owner's reply; the refinement state is the source of truth.";
+  }
   const ref = findActiveTask(ctx);
   if (!ref) return null;
   const s = readState(ref);
   let relevant = false;
-  if (tool === "Agent" || tool === "Task") relevant = identify(String(ti.subagent_type ?? "")).kind === "role";
+  if (spawnsAgent) relevant = calledAgent.kind === "role";
   if (tool === "SendMessage") relevant = s.runs.some((r) => r.agentId && r.agentId === ti.to);
   if (!relevant) return null;
   return `aw: task ${s.id} is now ${s.status}. Don't rely on the agent's reply — run \`aw sm next\`.`;

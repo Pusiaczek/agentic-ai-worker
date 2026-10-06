@@ -5,10 +5,13 @@
  * - state.json is written only by the CLI;
  * - agents edit files only during their own active run, and only what their role may touch;
  * - agents run tests only through `aw test` (guards.directTestCommands);
- * - per-role Bash deny/allow lists.
+ * - per-role Bash deny/allow lists;
+ * - the product owner (refinements) writes only its proposal file and runs only `aw refine submit` / `aw schema refine`;
+ * - `aw refine` belongs to the main session, and `aw refine approve` always asks the user.
  */
 import { activeRun, latestRun } from "../core/machine";
-import type { Ctx } from "../core/project";
+import { type Ctx, rel } from "../core/project";
+import { findWorkingRefinement, refinementPaths } from "../core/refinementStore";
 import { findActiveTask, readState, type TaskRef } from "../core/store";
 import { directTestCommandsBlocked, testCommandPrefixes } from "../core/tests";
 import type { Config } from "../schema/config";
@@ -16,7 +19,7 @@ import type { TaskState } from "../schema/state";
 import { Role, stepForWorking, WORKING_STATUSES } from "../schema/status";
 import { relativeToRoot } from "../util/fsx";
 import { globMatcher } from "../util/glob";
-import { type Identity, identify } from "./identity";
+import { type Identity, identify, isAwAgent } from "./identity";
 import { type AwInvocation, findAwInvocations, splitSegments, startsWithCommand, writesStateFile } from "./shell";
 
 export interface HookInput {
@@ -80,19 +83,46 @@ export function preToolUse(ctx: Ctx, input: HookInput): Decision {
  */
 export function guardUninitialized(input: HookInput): Decision {
   const who = identify(input.agent_type);
-  if (who.kind !== "role") return null;
+  if (!isAwAgent(who)) return null;
   const tool = input.tool_name ?? "";
   const onlyAw = (cmd: string) => splitSegments(cmd).every((seg) => findAwInvocations(seg).length > 0);
   const changes = EDIT_TOOLS.has(tool) || (SHELL_TOOLS.has(tool) && !onlyAw(String(input.tool_input?.command ?? "")));
   if (!changes) return null;
   return deny(
-    `aw is not set up in this repository (no .claude/aw.config.json), so the ${who.role} may not change anything here. Stop and report this in one line.`,
+    `aw is not set up in this repository (no .claude/aw.config.json), so ${agentName(who)} may not change anything here. Stop and report this in one line.`,
   );
+}
+
+/** "the tester", "the product owner": an aw agent in messages. */
+function agentName(who: Identity): string {
+  return who.kind === "role" ? `the ${who.role}` : "the product owner";
+}
+
+/** `aw refine` actions that only read, so any agent outside the task pipeline may run them. */
+const READ_ONLY_REFINE_ACTIONS = new Set(["next", "show"]);
+
+/**
+ * `aw refine …` belongs to the main session (the /aw:refine skill), except `submit`, which only the product owner runs.
+ * The product owner's own commands are checked by checkProductOwnerShell.
+ */
+function checkRefine(who: Identity, action: string | undefined): Decision {
+  if (who.kind === "role") return deny(`the ${who.role} may not run "aw refine …"; refinements happen outside the task pipeline.`);
+  if (who.kind === "other" && !READ_ONLY_REFINE_ACTIONS.has(action ?? "")) {
+    return deny("only the main session runs `aw refine` commands; other agents may only read (`aw refine next`, `aw refine show`).");
+  }
+  if (action === "submit") {
+    return deny("`aw refine submit` is run by the aw:product-owner agent. Start one with `aw refine start-agent <id>`.");
+  }
+  if (action === "approve") {
+    return ask('human gate — "aw refine approve" records YOUR decision. Confirm only if you approve the split into tasks.');
+  }
+  return null;
 }
 
 function checkAw(who: Identity, inv: AwInvocation): Decision {
   const { sub, action } = inv;
   if (sub === "hook") return deny("`aw hook` is reserved for Claude Code hooks.");
+  if (sub === "refine") return checkRefine(who, action);
   if (sub === "sm") {
     if (who.kind === "role") return deny(`the ${who.role} may not run orchestrator commands (aw sm …). Use \`aw ${who.role} …\`.`);
     if (who.kind === "other" && action !== "next") return deny("only the main session (scrum-master) runs `aw sm` commands.");
@@ -131,12 +161,31 @@ function findTestRunnerCall(config: Config, segments: string[]): string | undefi
 const useAwTestInstead = (call: string) =>
   `run tests through \`aw test\`, not "${firstWords(call)}". \`aw test\` runs this task's test files; narrow it with -t "<test name>" or pass files. Don't run the whole suite — submit runs it once as a gate.`;
 
+/**
+ * The product owner's only commands, each a whole simple command: `aw refine submit` and `aw schema refine`,
+ * launched as `aw` or `node …/aw.mjs`, optionally with `2>&1`. It reads the repository with Read, Grep and Glob.
+ * Allowed: `aw refine submit`, `node "C:/x/cli/aw.mjs" refine submit 2>&1`, `aw schema refine`.
+ * Denied: `ls`, `aw refine approve x`, `python -c "…aw refine submit…"`, `aw refine submit > out.txt`.
+ */
+const PRODUCT_OWNER_COMMAND =
+  /^(?:(?:\S*[\\/])?aw(?:\.cmd)?|node (?:"[^"]*aw\.mjs"|'[^']*aw\.mjs'|\S*aw\.mjs)) (?:refine submit|schema refine)(?: 2>&1)?$/;
+
+function checkProductOwnerShell(command: string): Decision {
+  const isAllowed = (segment: string) => PRODUCT_OWNER_COMMAND.test(segment.replace(/\s+/g, " ").trim());
+  const blocked = splitSegments(command).find((segment) => !isAllowed(segment));
+  if (blocked === undefined) return null;
+  return deny(
+    `the product owner runs only "aw refine submit" and "aw schema refine" ("${firstWords(blocked)}" is not allowed). Read the repository with Read, Grep and Glob; write only your proposal file.`,
+  );
+}
+
 function checkShell(ctx: Ctx, who: Identity, command: string): Decision {
+  if (who.kind === "product-owner") return checkProductOwnerShell(command);
   for (const invocation of findAwInvocations(command)) {
     const decision = checkAw(who, invocation);
     if (decision) return decision;
   }
-  if (writesStateFile(command)) return deny("state.json / state.sha256 are written only by the aw CLI. Use aw commands.");
+  if (writesStateFile(command)) return deny("state.json, refinement.json and their .sha256 seals are written only by the aw CLI. Use aw commands.");
   if (who.kind !== "role") return null;
 
   // `aw …` calls were checked above; the rules below apply to everything else in the command.
@@ -167,9 +216,10 @@ function checkEdit(ctx: Ctx, who: Identity, file: string, cwd: string): Decision
   const relPath = relativeToRoot(ctx.root, file, cwd);
   const tasksRel = relativeToRoot(ctx.root, ctx.tasksDir) ?? "";
   const inTasks = relPath !== null && tasksRel !== "" && (relPath + "/").toLowerCase().startsWith(`${tasksRel}/`.toLowerCase());
-  if (relPath && /(^|\/)state\.(json|sha256)$/.test(relPath) && inTasks) {
-    return deny("state.json / state.sha256 are written only by the aw CLI. Use aw commands.");
+  if (relPath && /(^|\/)(state|refinement)\.(json|sha256)$/.test(relPath) && inTasks) {
+    return deny("state.json, refinement.json and their .sha256 seals are written only by the aw CLI. Use aw commands.");
   }
+  if (who.kind === "product-owner") return checkProductOwnerEdit(ctx, relPath);
   const { task, error } = loadTask(ctx);
 
   if (who.kind !== "role") {
@@ -205,6 +255,22 @@ function checkEdit(ctx: Ctx, who: Identity, file: string, cwd: string): Decision
     return deny(`${relPath} is a protected test file (approved by the reviewer). Don't change it; if you believe it's wrong, report it in testDisputes.`);
   }
   return null;
+}
+
+/** The product owner writes exactly one file: proposal.json of the refinement it works on (status WORKING). */
+function checkProductOwnerEdit(ctx: Ctx, relPath: string | null): Decision {
+  let working: ReturnType<typeof findWorkingRefinement>;
+  try {
+    working = findWorkingRefinement(ctx);
+  } catch (e) {
+    return deny(`cannot read the refinements: ${(e as Error).message}`);
+  }
+  if (!working) {
+    return deny("no refinement has an active product-owner run, so the product owner may not write anything. Stop and report this in one line.");
+  }
+  const proposal = rel(ctx, refinementPaths(working.ref).proposal);
+  if (relPath && samePath(relPath, proposal)) return null;
+  return deny(`the product owner writes only its proposal, ${proposal}. Everything else goes into the proposal (summary, risks, openQuestions).`);
 }
 
 function checkHandback(ctx: Ctx, role: Role, message: string): Decision {

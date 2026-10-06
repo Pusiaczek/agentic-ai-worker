@@ -9,6 +9,8 @@ Plugin, który prowadzi zadanie programistyczne przez stały proces z czterema r
 | **reviewer** | subagent `aw:reviewer` | recenzuje testy, a potem kod: typowane uwagi z wagą i kategorią |
 | **coder** | subagent `aw:coder` | implementuje plan tak, żeby chronione testy przeszły |
 
+Przed tym procesem możesz rozbić większą funkcjonalność na małe zadania. Robi to **product owner** (subagent `aw:product-owner`, skill `/aw:refine`), patrz [Podział większych zadań](#podział-większych-zadań-awrefine).
+
 Stan zadania to plik JSON, który zapisuje **wyłącznie CLI `aw`**. CLI waliduje każdy output agentów (zod), pilnuje dozwolonych przejść statusów i niczego nie nadpisuje: każdy przebieg każdego agenta zostaje w historii. Hooki pluginu wymuszają zasady niezależnie od tego, czy model posłucha promptu.
 
 ## Przepływ
@@ -91,6 +93,33 @@ Robisz review diffa i piszesz uwagi na czacie. Scrum-master:
 
 Notatkę możesz też dodać w trakcie pracy („coder, pamiętaj o X”). Trafi do najbliższego przebiegu danej roli.
 
+## Podział większych zadań (`/aw:refine`)
+
+Większą funkcjonalność („vertical slice”, epik) najpierw dzielisz na małe zadania. Dopiero potem każde z nich przeprowadzasz osobno przez pipeline.
+
+```
+/aw:refine <opis funkcjonalności albo ścieżka do pliku>
+/aw:refine                       ← kontynuuje rozpoczęty podział
+```
+
+1. **Opis.** Skill zapisuje opis dosłownie w `.tasks/refinements/<id>/input.md`.
+2. **Propozycja.** Agent `aw:product-owner` czyta opis i repo, a potem proponuje zadania:
+   - pionowe: każde dostarcza działające zachowanie przez wszystkie potrzebne warstwy;
+   - w kolejności dostarczania, z zależnościami;
+   - ze szkicem kryteriów akceptacji i sugerowanym trybem (`tdd`/`light`).
+
+   Przygotowanie (np. testowa baza) dołącza do pierwszego zadania, które go potrzebuje. Osobnym zadaniem jest tylko wtedy, gdy jest duże albo ryzykowne i późniejsze zadanie od niego zależy.
+3. **Sprawdzenie.** CLI sprawdza propozycję:
+   - limity (domyślnie 8 kryteriów na zadanie i 15 zadań);
+   - zależności tylko od wcześniejszych zadań;
+   - każde zadanie pokrywa coś z opisu albo przygotowuje grunt pod późniejsze.
+4. **Twoja decyzja.** Dostajesz tabelę zadań, pytania otwarte i to, co zostało poza zakresem. Wybierasz: **Zatwierdź**, **Poprawki** albo **Anuluj**.
+   - Każda Twoja uwaga staje się notatką.
+   - Kolejną rewizję robi świeży agent i musi odpowiedzieć na każdą notatkę.
+5. **Pliki zadań.** Po `aw refine approve` (z potwierdzeniem, jak inne bramki) powstają pliki `items/01-<tytuł>.md`, `02-…`. Każdy uruchamiasz osobno: `/aw:scrum-master .tasks/refinements/<id>/items/01-….md`.
+
+Podział nie zależy od pipeline'u, więc możesz go robić w trakcie aktywnego taska. Obok siebie może czekać kilka podziałów, ale naraz pracuje tylko jeden product owner. Hook pilnuje, żeby product owner zapisywał wyłącznie swój `proposal.json` i uruchamiał tylko `aw refine submit`.
+
 ## Co zostaje po tasku
 
 ```
@@ -105,6 +134,11 @@ Notatkę możesz też dodać w trakcie pracy („coder, pamiętaj o X”). Trafi
     logs/                 ← pełne logi bramek (lint/testy)
     protected/            ← kopie zatwierdzonych testów
   backlog.json            ← follow-upy reviewera, processNotes agentów, wnioski z retro
+  refinements/<id>/       ← podziały większych zadań (/aw:refine)
+    refinement.json       ← stan podziału: przebiegi, rewizje, uwagi, historia
+    input.md              ← opis funkcjonalności w takiej wersji, jaką widział agent
+    proposal.md           ← ostatnia propozycja (czytelna); każda rewizja zostaje w revisions/
+    items/                ← zatwierdzone zadania, jeden plik na zadanie
 ```
 
 Przy każdym przebiegu zapisana jest ścieżka do pełnego transkryptu agenta (`transcriptPath`).
@@ -118,9 +152,10 @@ Przy każdym przebiegu zapisana jest ścieżka do pełnego transkryptu agenta (`
 |---|---|
 | Agent startuje tylko z właściwego statusu | CLI (`start` → exit 3), hook blokuje edycje bez aktywnego przebiegu |
 | Output agenta ma poprawny typ | CLI: zod (`.strict()`, więc literówka w polu to błąd) plus walidacja semantyczna (np. każde AC pokryte, każda uwaga z „Must address” obsłużona, werdykt spójny z uwagami) |
-| Stan zmienia tylko CLI | hash w `state.sha256` (ręczna edycja wykryta przy odczycie), hook blokuje Edit/Write/przekierowania do `state.json` |
+| Stan zmienia tylko CLI | hash w `state.sha256` i `refinement.sha256` (ręczna edycja wykryta przy odczycie), hook blokuje Edit/Write/przekierowania do `state.json` i `refinement.json` |
 | Każda rola woła tylko swoje komendy | hook: coder nie wywoła `aw sm …` ani `aw reviewer …`, główna sesja nie wywoła `aw coder …` |
-| Twoje decyzje są Twoje | hook zwraca `ask` dla `aw sm approve / accept / repair` |
+| Twoje decyzje są Twoje | hook zwraca `ask` dla `aw sm approve / accept / repair` i `aw refine approve` |
+| Product owner tylko proponuje | hook: zapisuje wyłącznie `proposal.json` podziału, nad którym pracuje, i uruchamia tylko `aw refine submit` / `aw schema refine` |
 | Tester pisze tylko testy, reviewer tylko czyta | hook na Edit/Write: globy testów, tylko plik outputu |
 | Coder nie rusza zatwierdzonych testów | hook plus porównanie hashy przy `submit` (łapie też zmiany zrobione przez Bash) |
 | Kod przechodzi lint/typecheck/testy | bramki uruchamiane przez CLI przy `submit`, więc wynik nie zależy od słowa agenta |
@@ -150,6 +185,7 @@ Wszystkie pola mają wartości domyślne (`aw schema config` wypisze pełny sche
 | `guards` | `bashDeny`, `blockMainSessionEditsDuringRuns`, `directTestCommands` (`block`/`allow`), `testCommandPrefixes` |
 | `commands.testFiles` / `testFiltered` | jak `aw test` odpala pliki testów (`{files}`) i filtruje po nazwie (`{pattern}`; bez `testFiltered` dokleja `-t`) |
 | `paths` | `tasksDir`, `archiveDir`, `roleNotesDir` |
+| `refine` | `maxCriteriaPerItem` (domyślnie 8) i `maxItems` (15): limity propozycji product ownera |
 
 ### Standardy kodu
 
@@ -171,7 +207,10 @@ Domyślnie coder jest **wznawiany** w kolejnych iteracjach (pamięta swój kod),
 | `aw <rola> start / submit / fail --reason` | komendy agentów (każdy tylko swoje) |
 | `aw test [<plik>...] [-t "<nazwa>"]` | testy tego taska (albo podane pliki), zawężone, ze zwięzłym wynikiem i czasem; każde wywołanie zapisuje się w przebiegu agenta |
 | `aw show [--json] [--task <id>]` | podsumowanie aktywnego lub zarchiwizowanego taska |
-| `aw schema <plan\|tester\|reviewer\|coder\|docs\|retro\|config\|state>` | JSON Schema i przykład |
+| `aw refine next [<id>]` | co teraz zrobić z podziałem (źródło prawdy dla `/aw:refine`) |
+| `aw refine new/start-agent/note/approve/cancel/reset/show` | komendy skilla `/aw:refine` |
+| `aw refine submit` | komenda product ownera: sprawdza i zapisuje propozycję |
+| `aw schema <plan\|tester\|reviewer\|coder\|docs\|retro\|refine\|config\|state>` | JSON Schema i przykład |
 | `aw backlog`, `aw stats`, `aw doctor`, `aw init` | backlog, statystyki, diagnostyka, wdrożenie |
 
 ## Ograniczenia (uczciwie)

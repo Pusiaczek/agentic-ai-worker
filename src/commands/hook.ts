@@ -5,7 +5,7 @@
  */
 import { tryLoadCtx } from "../core/project";
 import { guardUninitialized, type HookInput, preToolUse } from "../hooks/guards";
-import { identify } from "../hooks/identity";
+import { identify, isAwAgent } from "../hooks/identity";
 import { afterAgentCall, subagentStart, subagentStop } from "../hooks/lifecycle";
 import type { Io } from "../io";
 import { EXIT } from "../util/errors";
@@ -20,7 +20,7 @@ export function hookCommand(argv: string[], io: Io): number {
   } catch {
     return EXIT.OK;
   }
-  const guardedAgent = event === "pre-tool-use" && identify(input.agent_type).kind === "role";
+  const guardedAgent = event === "pre-tool-use" && isAwAgent(identify(input.agent_type));
   const failClosed = (message: string) => {
     if (guardedAgent) {
       emit(io, {
@@ -40,7 +40,7 @@ export function hookCommand(argv: string[], io: Io): number {
           hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: d.permissionDecision, permissionDecisionReason: d.reason },
         });
       }
-      if (event === "subagent-start" && identify(input.agent_type).kind === "role") {
+      if (event === "subagent-start" && isAwAgent(identify(input.agent_type))) {
         emit(io, {
           hookSpecificOutput: {
             hookEventName: "SubagentStart",

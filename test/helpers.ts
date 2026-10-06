@@ -2,7 +2,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach } from "vitest";
+import type { z } from "zod";
 import { run } from "../src/main";
+import type { RefineOutput } from "../src/schema/outputs";
+import type { RefinementState } from "../src/schema/refinement";
 import type { Run, TaskState } from "../src/schema/state";
 import type { Role } from "../src/schema/status";
 
@@ -196,4 +199,66 @@ export function outFile(dir: string): string {
 export function expectOk(result: Result): Result {
   if (result.code !== 0) throw new Error(`expected exit 0, got ${result.code}\nstdout: ${result.out}\nstderr: ${result.err}`);
   return result;
+}
+
+// ---------------------------------------------------------------- refinements
+
+export const SLICE = "users-slice";
+export const sliceFile = (file: string) => `.tasks/refinements/${SLICE}/${file}`;
+export const PROPOSAL = sliceFile("proposal.json");
+export const refinement = (dir: string) => readJson<RefinementState>(dir, sliceFile("refinement.json"));
+
+/** A proposal as the product owner writes it (fields with defaults may be left out). */
+export type Proposal = z.input<typeof RefineOutput>;
+
+/** A valid proposal: a prerequisite (the test database), then two items that deliver the slice. */
+export const REFINE_OUT: Proposal = {
+  summary: "Test database first, then create-and-read, then listing.",
+  items: [
+    {
+      title: "Test database",
+      goal: "Tests run against a clean database.",
+      scope: ["docker compose service"],
+      acceptanceCriteria: ["npm test uses the test database."],
+      suggestedMode: "light",
+      modeReason: "Configuration only.",
+      prerequisiteFor: "Items 2 and 3 test against the database.",
+    },
+    {
+      title: "Create and read a user",
+      goal: "POST /users creates a user and GET /users/:id returns it.",
+      scope: ["POST /users", "GET /users/:id"],
+      acceptanceCriteria: ["POST /users returns 201.", "GET /users/:id returns 404 for an unknown id."],
+      dependsOn: [1],
+      suggestedMode: "tdd",
+      modeReason: "New behavior.",
+    },
+    {
+      title: "List users",
+      goal: "GET /users returns users newest first.",
+      scope: ["GET /users with paging"],
+      acceptanceCriteria: ["GET /users returns users newest first."],
+      dependsOn: [2],
+      suggestedMode: "tdd",
+      modeReason: "New behavior.",
+    },
+  ],
+  coverage: [
+    { requirement: "Users can be created and read.", items: [2] },
+    { requirement: "Users can be listed.", items: [3] },
+  ],
+};
+
+/** A refinement of SLICE with the product owner at work (status WORKING). */
+export function toWorkingRefinement(dir: string): void {
+  write(dir, "slice.md", "Users module: create, read and list users.\n");
+  expectOk(cli(dir, ["refine", "new", "--title", "Users module", "--id", SLICE, "--input", "slice.md"]));
+  expectOk(cli(dir, ["refine", "start-agent", SLICE]));
+}
+
+/** A refinement of SLICE with REFINE_OUT accepted as revision 1 (status PROPOSED). */
+export function toProposedRefinement(dir: string): void {
+  toWorkingRefinement(dir);
+  write(dir, PROPOSAL, REFINE_OUT);
+  expectOk(cli(dir, ["refine", "submit"]));
 }

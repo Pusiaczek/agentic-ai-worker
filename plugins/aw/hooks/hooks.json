@@ -1,5 +1,5 @@
 {
-  "description": "aw: role guards (PreToolUse), run tracing and protocol enforcement (SubagentStart/Stop), state pointer after agent calls (PostToolUse). Inactive in repositories without .claude/aw.config.json.",
+  "description": "aw: guards for the task roles and the product owner (PreToolUse), run tracing and protocol enforcement (SubagentStart/Stop), state pointer after agent calls (PostToolUse). Inactive in repositories without .claude/aw.config.json.",
   "hooks": {
     "PreToolUse": [
       {
@@ -15,13 +15,13 @@
     ],
     "SubagentStart": [
       {
-        "matcher": "aw:(tester|reviewer|coder)$",
+        "matcher": "aw:(tester|reviewer|coder|product-owner)$",
         "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/aw.mjs\" hook subagent-start", "timeout": 20 }]
       }
     ],
     "SubagentStop": [
       {
-        "matcher": "aw:(tester|reviewer|coder)$",
+        "matcher": "aw:(tester|reviewer|coder|product-owner)$",
         "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/cli/aw.mjs\" hook subagent-stop", "timeout": 20 }]
       }
     ]

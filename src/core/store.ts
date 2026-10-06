@@ -2,16 +2,17 @@
  * Reading and writing task state. Invariants:
  * - only this module writes state.json;
  * - every write is validated against the schema, atomic, and paired with state.sha256,
- *   so an edit made outside the CLI is detected on the next read;
+ *   so an edit made outside the CLI is detected on the next read (see sealed.ts);
  * - mutations run under a lock file.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Backlog, TaskState } from "../schema/state";
 import { AwError, EXIT } from "../util/errors";
-import { nowIso, readTextIfExists, sha256, sleepSync, writeFileAtomic } from "../util/fsx";
+import { nowIso, readTextIfExists, writeFileAtomic } from "../util/fsx";
 import { formatIssues } from "../util/zod";
 import type { Ctx } from "./project";
+import { parseSealedText, readSealed, type SealedFile, withFileLock, writeSealed } from "./sealed";
 
 export interface TaskRef {
   id: string;
@@ -21,7 +22,6 @@ export interface TaskRef {
 export const STATE_FILE = "state.json";
 const HASH_FILE = "state.sha256";
 const LOCK_FILE = "state.lock";
-const STALE_LOCK_MS = 60_000;
 
 export const taskPaths = (ref: TaskRef) => ({
   state: path.join(ref.dir, STATE_FILE),
@@ -33,6 +33,19 @@ export const taskPaths = (ref: TaskRef) => ({
   logs: path.join(ref.dir, "logs"),
   protected: path.join(ref.dir, "protected"),
 });
+
+function sealedState(ref: TaskRef): SealedFile<TaskState> {
+  return {
+    file: path.join(ref.dir, STATE_FILE),
+    hash: path.join(ref.dir, HASH_FILE),
+    lock: path.join(ref.dir, LOCK_FILE),
+    schema: TaskState,
+    label: `task ${ref.id}`,
+    fileName: STATE_FILE,
+    tamperedHint:
+      "Only the aw CLI may write state.json. If the edit was intended, the orchestrator can accept it with `aw sm repair` (requires user confirmation).",
+  };
+}
 
 export function listActive(ctx: Ctx): TaskRef[] {
   if (!fs.existsSync(ctx.activeDir)) return [];
@@ -57,73 +70,20 @@ export function requireActiveTask(ctx: Ctx): TaskRef {
 }
 
 export function parseStateText(text: string, label: string): TaskState {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch (e) {
-    throw new AwError(`${label}: state.json is not valid JSON: ${(e as Error).message}`, EXIT.TAMPERED);
-  }
-  const parsed = TaskState.safeParse(raw);
-  if (!parsed.success) {
-    const lines = formatIssues(parsed.error).map((l) => `  - ${l}`);
-    throw new AwError(`${label}: state.json does not match the schema:\n${lines.join("\n")}`, EXIT.TAMPERED);
-  }
-  return parsed.data;
+  return parseSealedText(TaskState, STATE_FILE, text, label);
 }
 
 export function readState(ref: TaskRef, opts: { verifyHash?: boolean } = {}): TaskState {
-  const p = taskPaths(ref);
-  const text = fs.readFileSync(p.state, "utf8");
-  if (opts.verifyHash !== false) {
-    const expected = readTextIfExists(p.hash)?.trim();
-    if (expected !== sha256(text)) {
-      throw new AwError(
-        `state.json of task ${ref.id} was modified outside the aw CLI (hash mismatch).`,
-        EXIT.TAMPERED,
-        "Only the aw CLI may write state.json. If the edit was intended, the orchestrator can accept it with `aw sm repair` (requires user confirmation).",
-      );
-    }
-  }
-  return parseStateText(text, `task ${ref.id}`);
+  return readSealed(sealedState(ref), opts);
 }
 
 export function writeState(ref: TaskRef, state: TaskState): void {
   state.updatedAt = nowIso();
-  const checked = TaskState.parse(state); // a failure here is a bug in the CLI, not user error
-  const text = `${JSON.stringify(checked, null, 2)}\n`;
-  const p = taskPaths(ref);
-  writeFileAtomic(p.state, text);
-  writeFileAtomic(p.hash, `${sha256(text)}\n`);
+  writeSealed(sealedState(ref), state);
 }
 
 export function withLock<T>(ref: TaskRef, fn: () => T, timeoutMs = 15_000): T {
-  const lock = path.join(ref.dir, LOCK_FILE);
-  const started = Date.now();
-  for (;;) {
-    try {
-      fs.writeFileSync(lock, `${process.pid}\n`, { flag: "wx" });
-      break;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      try {
-        if (Date.now() - fs.statSync(lock).mtimeMs > STALE_LOCK_MS) {
-          fs.rmSync(lock, { force: true });
-          continue;
-        }
-      } catch {
-        continue; // lock vanished between exists-check and stat
-      }
-      if (Date.now() - started > timeoutMs) {
-        throw new AwError(`Task ${ref.id} is locked by another aw process (${lock}).`);
-      }
-      sleepSync(50);
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    fs.rmSync(lock, { force: true });
-  }
+  return withFileLock(path.join(ref.dir, LOCK_FILE), `Task ${ref.id}`, fn, timeoutMs);
 }
 
 /** Read → change in place → validate → write, under the lock. If `fn` throws, nothing is written. */
