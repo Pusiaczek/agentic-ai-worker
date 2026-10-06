@@ -85,18 +85,28 @@ export const DEFAULT_REVIEWER_BASH = [
   "echo",
 ];
 
+/** What a gate's command must do: pass, or fail (e.g. new tests before the code exists). */
+export const GateExpectation = z.enum(["pass", "fail"]);
+export type GateExpectation = z.infer<typeof GateExpectation>;
+
+/** What happens when a gate doesn't do what it should: refuse the submit, or only record it for the reviewer. */
+export const GateMismatchPolicy = z.enum(["reject", "warn"]);
+export type GateMismatchPolicy = z.infer<typeof GateMismatchPolicy>;
+
 const Gate = z
   .object({
     run: z.string().min(1).describe("Key in `commands`. `{files}` in that command is replaced with the relevant test files."),
-    expect: z.enum(["pass", "fail"]).default("pass"),
-    onMismatch: z.enum(["reject", "warn"]).default("reject").describe("reject = submit is refused; warn = recorded for the reviewer."),
+    expect: GateExpectation.default("pass"),
+    onMismatch: GateMismatchPolicy.default("reject").describe("reject = submit is refused; warn = recorded for the reviewer."),
   })
   .strict();
 export type Gate = z.infer<typeof Gate>;
 
-const ResumePolicy = z.enum(["always", "never", "on-dispute"]);
+/** Whether a role's next iteration continues the previous agent's context (SendMessage) or starts a fresh agent. */
+export const ResumePolicy = z.enum(["always", "never", "on-dispute"]);
+export type ResumePolicy = z.infer<typeof ResumePolicy>;
 
-const agentPolicy = (resume: z.infer<typeof ResumePolicy>, bashAllow: string[]) =>
+const agentPolicy = (resume: ResumePolicy, bashAllow: string[]) =>
   z
     .object({
       resume: ResumePolicy.default(resume).describe("Whether the next run of this role continues the previous agent's context."),

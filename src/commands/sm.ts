@@ -25,9 +25,20 @@ import {
   writeState,
 } from "../core/store";
 import type { Io } from "../io";
-import { DocsCheckInput, PlanInput, RetroInput } from "../schema/outputs";
-import { type BacklogItem, type PlanRevision, TaskId, type TaskState } from "../schema/state";
-import { Mode, Role, roleForStatus, Status, stepForWorking, TERMINAL } from "../schema/status";
+import { SmAction } from "../schema/commands";
+import { DocsCheckInput, DocStatus, DocsVerdict, PlanInput, RetroInput } from "../schema/outputs";
+import {
+  type BacklogItem,
+  BacklogKind,
+  BacklogStatus,
+  NoteSource,
+  type PlanRevision,
+  RunState,
+  TaskEventName,
+  TaskId,
+  type TaskState,
+} from "../schema/state";
+import { Actor, Mode, Role, roleForStatus, Status, stepForWorking, TERMINAL } from "../schema/status";
 import { type Args, parseArgs, requireStr, str } from "../util/args";
 import { AwError, EXIT } from "../util/errors";
 import { ensureDir, nowIso, readTextIfExists, slugify, today, writeFileAtomic } from "../util/fsx";
@@ -51,26 +62,26 @@ const USAGE = `aw sm <command>
   repair                           accept a manual edit of state.json (asks the user to confirm)`;
 
 export function smCommand(argv: string[], io: Io): number {
-  const [sub, ...rest] = argv;
+  const [word, ...rest] = argv;
+  const action = SmAction.safeParse(word);
+  if (!action.success) throw new AwError(word ? `Unknown command: aw sm ${word}` : "Missing sm command.", EXIT.USAGE, USAGE);
   const args = parseArgs(rest);
   const ctx = loadCtx(io.cwd);
-  switch (sub) {
-    case "new": return smNew(ctx, args, io);
-    case "plan": return smPlan(ctx, args, io);
-    case "approve": return smApprove(ctx, args, io);
-    case "next": return smNext(ctx, io);
-    case "note": return smNote(ctx, args, io);
-    case "block": return smBlock(ctx, args, io);
-    case "unblock": return smUnblock(ctx, args, io);
-    case "cancel": return smCancel(ctx, args, io);
-    case "reset": return smReset(ctx, args, io);
-    case "docs": return smDocs(ctx, args, io);
-    case "accept": return smAccept(ctx, args, io);
-    case "reopen": return smReopen(ctx, args, io);
-    case "archive": return smArchive(ctx, args, io);
-    case "repair": return smRepair(ctx, io);
-    default:
-      throw new AwError(sub ? `Unknown command: aw sm ${sub}` : "Missing sm command.", EXIT.USAGE, USAGE);
+  switch (action.data) {
+    case SmAction.enum.new: return smNew(ctx, args, io);
+    case SmAction.enum.plan: return smPlan(ctx, args, io);
+    case SmAction.enum.approve: return smApprove(ctx, args, io);
+    case SmAction.enum.next: return smNext(ctx, io);
+    case SmAction.enum.note: return smNote(ctx, args, io);
+    case SmAction.enum.block: return smBlock(ctx, args, io);
+    case SmAction.enum.unblock: return smUnblock(ctx, args, io);
+    case SmAction.enum.cancel: return smCancel(ctx, args, io);
+    case SmAction.enum.reset: return smReset(ctx, args, io);
+    case SmAction.enum.docs: return smDocs(ctx, args, io);
+    case SmAction.enum.accept: return smAccept(ctx, args, io);
+    case SmAction.enum.reopen: return smReopen(ctx, args, io);
+    case SmAction.enum.archive: return smArchive(ctx, args, io);
+    case SmAction.enum.repair: return smRepair(ctx, io);
   }
 }
 
@@ -126,7 +137,7 @@ function smNew(ctx: Ctx, args: Args, io: Io): number {
     title,
     mode: mode.data,
     source: { kind: kind as TaskState["source"]["kind"], ...(sourceRef ? { ref: sourceRef } : {}) },
-    status: "PLANNING",
+    status: Status.enum.PLANNING,
     createdAt: now,
     updatedAt: now,
     git: gitInfo(ctx),
@@ -139,7 +150,7 @@ function smNew(ctx: Ctx, args: Args, io: Io): number {
     lastSpawn: {},
     counters: { run: 0, test: 0, finding: 0, note: 0 },
   };
-  addEvent(s, "scrum-master", "task_created", `mode ${mode.data}, source ${kind}`);
+  addEvent(s, Actor.enum["scrum-master"], TaskEventName.enum.task_created, `mode ${mode.data}, source ${kind}`);
   writeState(ref, s);
 
   io.out(`Created task ${id} (${mode.data}) in ${rel(ctx, ref.dir)}`);
@@ -159,7 +170,7 @@ function smPlan(ctx: Ctx, args: Args, io: Io): number {
   if (!requirements) {
     throw new AwError(`requirements.md is empty. Write the task text verbatim into ${rel(ctx, p.requirements)} first.`, EXIT.VALIDATION);
   }
-  if (input.mode === "tdd" && !input.contract.trim()) {
+  if (input.mode === Mode.enum.tdd && !input.contract.trim()) {
     throw new AwError(
       "tdd mode needs a contract (modules, function signatures, endpoints, error shapes): the tester writes tests against it before any code exists.",
       EXIT.VALIDATION,
@@ -168,7 +179,7 @@ function smPlan(ctx: Ctx, args: Args, io: Io): number {
   const { acceptanceCriteria, ...rest } = input;
 
   const s = mutate(ref, (s) => {
-    expectStatus(s, ["PLANNING", "AWAITING_APPROVAL"], "submit a plan");
+    expectStatus(s, [Status.enum.PLANNING, Status.enum.AWAITING_APPROVAL], "submit a plan");
     const revision = s.plans.length + 1;
     const plan: PlanRevision = {
       ...rest,
@@ -181,11 +192,14 @@ function smPlan(ctx: Ctx, args: Args, io: Io): number {
     if (input.title) s.title = input.title;
     writeFileAtomic(p.plan, renderPlan(s, plan));
     if (ctx.config.flow.requireApproval[input.mode]) {
-      if (s.status === "PLANNING") transition(s, "AWAITING_APPROVAL", "scrum-master", `plan revision ${revision}`);
-      else addEvent(s, "scrum-master", "plan_revised", `revision ${revision}`);
+      if (s.status === Status.enum.PLANNING) {
+        transition(s, Status.enum.AWAITING_APPROVAL, Actor.enum["scrum-master"], `plan revision ${revision}`);
+      }
+      else addEvent(s, Actor.enum["scrum-master"], TaskEventName.enum.plan_revised, `revision ${revision}`);
     } else {
       s.approvedPlanRevision = revision;
-      transition(s, firstWorkStatus(input.mode), "scrum-master", `plan revision ${revision} auto-approved (flow.requireApproval.${input.mode} = false)`);
+      const reason = `plan revision ${revision} auto-approved (flow.requireApproval.${input.mode} = false)`;
+      transition(s, firstWorkStatus(input.mode), Actor.enum["scrum-master"], reason);
     }
     return s;
   });
@@ -198,10 +212,10 @@ function smPlan(ctx: Ctx, args: Args, io: Io): number {
 
 function smApprove(ctx: Ctx, args: Args, io: Io): number {
   const s = mutate(requireActiveTask(ctx), (s) => {
-    expectStatus(s, ["AWAITING_APPROVAL"], "approve");
+    expectStatus(s, [Status.enum.AWAITING_APPROVAL], "approve");
     const plan = s.plans.at(-1)!;
     s.approvedPlanRevision = plan.revision;
-    transition(s, firstWorkStatus(s.mode), "user", str(args, "note") ?? `plan revision ${plan.revision} approved`);
+    transition(s, firstWorkStatus(s.mode), Actor.enum.user, str(args, "note") ?? `plan revision ${plan.revision} approved`);
     return s;
   });
   io.out(`Plan revision ${s.approvedPlanRevision} approved.`);
@@ -221,10 +235,12 @@ function smNote(ctx: Ctx, args: Args, io: Io): number {
   const role = Role.safeParse(requireStr(args, "for", usage));
   if (!role.success) throw new AwError("--for must be tester, reviewer or coder.", EXIT.USAGE);
   const text = requireStr(args, "text", usage);
-  const source = str(args, "source") === "scrum-master" ? "scrum-master" : "user";
+  const fromScrumMaster = str(args, "source") === NoteSource.enum["scrum-master"];
+  const source = fromScrumMaster ? NoteSource.enum["scrum-master"] : NoteSource.enum.user;
+  const author = fromScrumMaster ? Actor.enum["scrum-master"] : Actor.enum.user;
   const note = mutate(requireActiveTask(ctx), (s) => {
     if (TERMINAL.includes(s.status)) throw new AwError(`Task is ${s.status}.`, EXIT.STATUS_MISMATCH);
-    return addNote(s, role.data, source, text, source);
+    return addNote(s, role.data, source, text, author);
   });
   io.out(`Note ${note.id} queued for the next ${role.data} run.`);
   return EXIT.OK;
@@ -233,7 +249,7 @@ function smNote(ctx: Ctx, args: Args, io: Io): number {
 function abandonActiveRun(s: TaskState, reason: string): void {
   const run = activeRun(s);
   if (!run) return;
-  run.state = "abandoned";
+  run.state = RunState.enum.abandoned;
   run.finishedAt = nowIso();
   run.failReason = reason;
   releaseNotes(s, run.id);
@@ -243,7 +259,7 @@ function smBlock(ctx: Ctx, args: Args, io: Io): number {
   const reason = requireStr(args, "reason", 'aw sm block --reason "<why>"');
   const s = mutate(requireActiveTask(ctx), (s) => {
     abandonActiveRun(s, `blocked: ${reason}`);
-    transition(s, "BLOCKED", "scrum-master", reason);
+    transition(s, Status.enum.BLOCKED, Actor.enum["scrum-master"], reason);
     return s;
   });
   io.out(`Task ${s.id} blocked.`);
@@ -257,11 +273,14 @@ function smUnblock(ctx: Ctx, args: Args, io: Io): number {
   if (!to.success) throw new AwError(`--to must be one of: ${Status.options.join(", ")}`, EXIT.USAGE);
   const note = str(args, "note");
   const s = mutate(requireActiveTask(ctx), (s) => {
-    expectStatus(s, ["BLOCKED"], "unblock");
+    expectStatus(s, [Status.enum.BLOCKED], "unblock");
     const wasDispute = s.blocked?.reason.startsWith("test dispute") ?? false;
-    transition(s, to.data, "user", note);
+    transition(s, to.data, Actor.enum.user, note);
     const target = roleForStatus(to.data);
-    if (note && target?.phase === "ready") addNote(s, target.role, wasDispute ? "dispute" : "block", note, "user");
+    if (note && target?.phase === "ready") {
+      const source = wasDispute ? NoteSource.enum.dispute : NoteSource.enum.block;
+      addNote(s, target.role, source, note, Actor.enum.user);
+    }
     return s;
   });
   io.out(`Unblocked → ${s.status}.`);
@@ -273,7 +292,7 @@ function smCancel(ctx: Ctx, args: Args, io: Io): number {
   const reason = requireStr(args, "reason", 'aw sm cancel --reason "<why>"');
   const s = mutate(requireActiveTask(ctx), (s) => {
     abandonActiveRun(s, `cancelled: ${reason}`);
-    transition(s, "CANCELLED", "user", reason);
+    transition(s, Status.enum.CANCELLED, Actor.enum.user, reason);
     return s;
   });
   io.out(`Task ${s.id} cancelled.`);
@@ -288,7 +307,7 @@ function smReset(ctx: Ctx, args: Args, io: Io): number {
     if (!r || !step) throw new AwError(`Nothing to reset: status ${s.status} is not an agent's working status.`, EXIT.STATUS_MISMATCH);
     const run = activeRun(s);
     abandonActiveRun(s, str(args, "note") ?? "reset by orchestrator");
-    transition(s, step.ready, "scrum-master", str(args, "note") ?? `run ${run?.id ?? "?"} reset`);
+    transition(s, step.ready, Actor.enum["scrum-master"], str(args, "note") ?? `run ${run?.id ?? "?"} reset`);
     return s;
   });
   io.out(`Reset → ${s.status}.`);
@@ -300,15 +319,15 @@ function smDocs(ctx: Ctx, args: Args, io: Io): number {
   const file = requireStr(args, "file", "aw sm docs --file <docs.json>");
   const input = parseInput(DocsCheckInput, readInputJson(io, file), file, "docs");
   const s = mutate(requireActiveTask(ctx), (s) => {
-    expectStatus(s, ["DOCS_CHECK"], "record a docs check");
+    expectStatus(s, [Status.enum.DOCS_CHECK], "record a docs check");
     s.docsChecks.push({ ...input, at: nowIso() });
-    if (input.verdict === "needs_changes") {
-      for (const item of input.items.filter((i) => i.status === "missing")) {
-        addNote(s, "coder", "docs-check", `Update ${item.path}: ${item.note}`, "scrum-master");
+    if (input.verdict === DocsVerdict.enum.needs_changes) {
+      for (const item of input.items.filter((i) => i.status === DocStatus.enum.missing)) {
+        addNote(s, Role.enum.coder, NoteSource.enum["docs-check"], `Update ${item.path}: ${item.note}`, Actor.enum["scrum-master"]);
       }
-      transition(s, "READY_FOR_CODING", "scrum-master", "documentation needs changes");
+      transition(s, Status.enum.READY_FOR_CODING, Actor.enum["scrum-master"], "documentation needs changes");
     } else {
-      transition(s, "AWAITING_ACCEPTANCE", "scrum-master", "documentation ok");
+      transition(s, Status.enum.AWAITING_ACCEPTANCE, Actor.enum["scrum-master"], "documentation ok");
     }
     return s;
   });
@@ -319,9 +338,9 @@ function smDocs(ctx: Ctx, args: Args, io: Io): number {
 
 function smAccept(ctx: Ctx, args: Args, io: Io): number {
   const s = mutate(requireActiveTask(ctx), (s) => {
-    expectStatus(s, ["AWAITING_ACCEPTANCE"], "accept");
+    expectStatus(s, [Status.enum.AWAITING_ACCEPTANCE], "accept");
     s.acceptedAt = nowIso();
-    transition(s, "DONE", "user", str(args, "note") ?? "accepted");
+    transition(s, Status.enum.DONE, Actor.enum.user, str(args, "note") ?? "accepted");
     return s;
   });
   io.out(`Task ${s.id} accepted.`);
@@ -339,7 +358,7 @@ function smReopen(ctx: Ctx, args: Args, io: Io): number {
   const note = requireStr(args, "note", usage);
   if (!["PLANNING", "READY_FOR_TESTS", "READY_FOR_CODING"].includes(to)) throw new AwError(`--to must be PLANNING, READY_FOR_TESTS or READY_FOR_CODING.`, EXIT.USAGE);
   const s = mutate(requireActiveTask(ctx), (s) => {
-    expectStatus(s, ["AWAITING_ACCEPTANCE"], "reopen");
+    expectStatus(s, [Status.enum.AWAITING_ACCEPTANCE], "reopen");
     const target = roleForStatus(to as Status);
     if (target && pendingNotes(s, target.role).length === 0) {
       throw new AwError(
@@ -348,7 +367,7 @@ function smReopen(ctx: Ctx, args: Args, io: Io): number {
         `First add each of the user's remarks as its own note: aw sm note --for ${target.role} --text "<remark>" — then reopen.`,
       );
     }
-    transition(s, to as Status, "user", note);
+    transition(s, to as Status, Actor.enum.user, note);
     return s;
   });
   io.out(`Reopened → ${s.status}.`);
@@ -367,13 +386,15 @@ function collectBacklog(s: TaskState, retroImprovements: string[]): Omit<Backlog
   const at = nowIso();
   const items: Omit<BacklogItem, "id">[] = [];
   const add = (kind: BacklogItem["kind"], text: string, extra: Partial<BacklogItem> = {}) =>
-    items.push({ kind, text, taskId: s.id, createdAt: at, status: "open", ...extra });
+    items.push({ kind, text, taskId: s.id, createdAt: at, status: BacklogStatus.enum.open, ...extra });
   for (const r of s.runs) {
     if (!r.output) continue;
-    if (r.role === "reviewer") for (const f of r.output.followUps) add("followUp", f.text, { runId: r.id, role: r.role });
-    for (const n of r.output.processNotes) add("processNote", n, { runId: r.id, role: r.role });
+    if (r.role === Role.enum.reviewer) {
+      for (const f of r.output.followUps) add(BacklogKind.enum.followUp, f.text, { runId: r.id, role: r.role });
+    }
+    for (const n of r.output.processNotes) add(BacklogKind.enum.processNote, n, { runId: r.id, role: r.role });
   }
-  for (const x of retroImprovements) add("processImprovement", x, { role: "scrum-master" });
+  for (const x of retroImprovements) add(BacklogKind.enum.processImprovement, x, { role: "scrum-master" });
   return items;
 }
 
@@ -384,7 +405,7 @@ function smArchive(ctx: Ctx, args: Args, io: Io): number {
   const s = mutate(ref, (s) => {
     expectStatus(s, [...TERMINAL], "archive");
     if (retro) s.retro = { ...retro, at: nowIso() };
-    addEvent(s, "scrum-master", "archived");
+    addEvent(s, Actor.enum["scrum-master"], TaskEventName.enum.archived);
     return s;
   });
   writeFileAtomic(taskPaths(ref).report, renderReport(s));
@@ -410,7 +431,7 @@ function smRepair(ctx: Ctx, io: Io): number {
   const ref = requireActiveTask(ctx);
   withLock(ref, () => {
     const s = readState(ref, { verifyHash: false });
-    addEvent(s, "user", "state_repaired", "manual edit of state.json accepted");
+    addEvent(s, Actor.enum.user, TaskEventName.enum.state_repaired, "manual edit of state.json accepted");
     writeState(ref, s);
   });
   io.out(`state.json of ${ref.id} re-validated and re-sealed.`);

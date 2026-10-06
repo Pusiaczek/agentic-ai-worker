@@ -6,9 +6,19 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Config } from "../schema/config";
-import { type CoderOutput, isBlocking, type RefineOutput, type ReviewerOutput, type TesterOutput } from "../schema/outputs";
+import {
+  type CoderOutput,
+  CoverageVerdict,
+  FileChange,
+  isBlocking,
+  PreviousFindingStatus,
+  type RefineOutput,
+  type ReviewerOutput,
+  ReviewVerdict,
+  type TesterOutput,
+} from "../schema/outputs";
 import type { ReviewerRun, Run, TaskState } from "../schema/state";
-import type { ReviewTarget } from "../schema/status";
+import { Mode, ReviewTarget } from "../schema/status";
 import { fileSha256, relativeToRoot } from "../util/fsx";
 import { globMatcher } from "../util/glob";
 import { acIds, openBlockingFindings, protectedTests } from "./machine";
@@ -97,7 +107,7 @@ export function checkTester(ctx: Ctx, s: TaskState, run: Run, out: TesterOutput)
   }
   if (!out.tests.some((t) => t.edgeCase)) warnings.push("tester marked no test as an edge case");
 
-  checkAddressed(s, "tests", run, out, errors);
+  checkAddressed(s, ReviewTarget.enum.tests, run, out, errors);
   return { errors, warnings };
 }
 
@@ -129,11 +139,11 @@ export function checkReviewer(ctx: Ctx, s: TaskState, run: ReviewerRun, out: Rev
   }
 
   const newBlocking = out.findings.filter((f) => isBlocking(f.severity)).length;
-  const notFixed = out.previousFindings.filter((p) => p.status === "not_fixed").length;
-  if (out.verdict === "approve") {
+  const notFixed = out.previousFindings.filter((p) => p.status === PreviousFindingStatus.enum.not_fixed).length;
+  if (out.verdict === ReviewVerdict.enum.approve) {
     if (newBlocking) errors.push(`verdict "approve" with ${newBlocking} blocker/major finding(s) — request changes or lower their severity`);
     if (notFixed) errors.push(`verdict "approve" while ${notFixed} previous finding(s) are not_fixed`);
-    const missing = out.acCoverage.filter((c) => c.verdict === "missing").map((c) => c.ac);
+    const missing = out.acCoverage.filter((c) => c.verdict === CoverageVerdict.enum.missing).map((c) => c.ac);
     if (missing.length) errors.push(`verdict "approve" but acCoverage marks ${missing.join(", ")} as missing`);
   } else if (!newBlocking && !notFixed) {
     errors.push(
@@ -151,7 +161,7 @@ export function checkCoder(ctx: Ctx, s: TaskState, run: Run, out: CoderOutput): 
   out.testsAdded.forEach((t, i) => (t.file = normalizePath(ctx, t.file, `testsAdded[${i}].file`, errors)));
   out.docsUpdated.forEach((d, i) => (d.path = normalizePath(ctx, d.path, `docsUpdated[${i}].path`, errors)));
 
-  checkAddressed(s, "code", run, out, errors);
+  checkAddressed(s, ReviewTarget.enum.code, run, out, errors);
 
   const testIds = new Set(protectedTests(s).map((t) => t.id));
   for (const d of out.testDisputes) {
@@ -170,7 +180,7 @@ export function checkCoder(ctx: Ctx, s: TaskState, run: Run, out: CoderOutput): 
     ...out.testsAdded.flatMap((t, i) => t.covers.map((ac) => ({ ac, where: `testsAdded[${i}].covers` }))),
     ...out.untestedCriteria.map((u, i) => ({ ac: u.ac, where: `untestedCriteria[${i}]` })),
   ], errors);
-  if (s.mode === "light") {
+  if (s.mode === Mode.enum.light) {
     checkCoverage(
       s,
       new Set(out.testsAdded.flatMap((t) => t.covers)),
@@ -180,7 +190,9 @@ export function checkCoder(ctx: Ctx, s: TaskState, run: Run, out: CoderOutput): 
   }
 
   for (const f of out.filesChanged) {
-    if (f.change !== "deleted" && !exists(ctx, f.path)) warnings.push(`filesChanged lists ${f.path} as ${f.change}, but it does not exist`);
+    if (f.change !== FileChange.enum.deleted && !exists(ctx, f.path)) {
+      warnings.push(`filesChanged lists ${f.path} as ${f.change}, but it does not exist`);
+    }
   }
   for (const t of out.testsAdded) {
     if (!exists(ctx, t.file)) errors.push(`testsAdded: file not found: ${t.file}`);

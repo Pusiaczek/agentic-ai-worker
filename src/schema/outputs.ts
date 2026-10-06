@@ -118,7 +118,7 @@ export const FindingInput = FindingBase.superRefine((f, ctx) => {
   if (f.endLine !== undefined && (f.line === undefined || f.endLine < f.line)) {
     ctx.addIssue({ code: "custom", path: ["endLine"], message: "endLine requires line and must be >= line" });
   }
-  if (f.category === "maintainability" && isBlocking(f.severity) && !f.evidence) {
+  if (f.category === FindingCategory.enum.maintainability && isBlocking(f.severity) && !f.evidence) {
     ctx.addIssue({
       code: "custom",
       path: ["evidence"],
@@ -128,17 +128,28 @@ export const FindingInput = FindingBase.superRefine((f, ctx) => {
   }
 });
 
+export const ReviewVerdict = z.enum(["approve", "changes_requested"]);
+export type ReviewVerdict = z.infer<typeof ReviewVerdict>;
+
+/** The reviewer's verdict on a blocking finding from an earlier round. */
+export const PreviousFindingStatus = z.enum(["fixed", "not_fixed", "no_longer_applicable"]);
+export type PreviousFindingStatus = z.infer<typeof PreviousFindingStatus>;
+
+/** How well the tests or the code cover one acceptance criterion. */
+export const CoverageVerdict = z.enum(["covered", "partial", "missing"]);
+export type CoverageVerdict = z.infer<typeof CoverageVerdict>;
+
 export const ReviewerOutput = z
   .object({
     ...common,
-    verdict: z.enum(["approve", "changes_requested"]),
+    verdict: ReviewVerdict,
     findings: z.array(FindingInput).default([]),
     previousFindings: z
       .array(
         z
           .object({
             id: FindingId,
-            status: z.enum(["fixed", "not_fixed", "no_longer_applicable"]),
+            status: PreviousFindingStatus,
             note: Text.optional(),
           })
           .strict(),
@@ -148,7 +159,7 @@ export const ReviewerOutput = z
     acCoverage: z
       .array(
         z
-          .object({ ac: AcId, verdict: z.enum(["covered", "partial", "missing"]), note: Text.optional() })
+          .object({ ac: AcId, verdict: CoverageVerdict, note: Text.optional() })
           .strict(),
       )
       .describe("One entry per acceptance criterion."),
@@ -162,13 +173,16 @@ export type ReviewerOutput = z.infer<typeof ReviewerOutput>;
 
 // ---------------------------------------------------------------- coder
 
+export const FileChange = z.enum(["added", "modified", "deleted", "renamed"]);
+export type FileChange = z.infer<typeof FileChange>;
+
 export const CoderOutput = z
   .object({
     ...common,
     filesChanged: z
       .array(
         z
-          .object({ path: FilePath, change: z.enum(["added", "modified", "deleted", "renamed"]), why: Text })
+          .object({ path: FilePath, change: FileChange, why: Text })
           .strict(),
       )
       .min(1),
@@ -214,23 +228,30 @@ export const PlanInput = z
   .strict();
 export type PlanInput = z.infer<typeof PlanInput>;
 
+/** Whether one document was updated for the change, didn't need to be, or still misses the update. */
+export const DocStatus = z.enum(["updated", "not_needed", "missing"]);
+export type DocStatus = z.infer<typeof DocStatus>;
+
+export const DocsVerdict = z.enum(["ok", "needs_changes"]);
+export type DocsVerdict = z.infer<typeof DocsVerdict>;
+
 export const DocsCheckBase = z
   .object({
     items: z
       .array(
         z
-          .object({ path: FilePath, status: z.enum(["updated", "not_needed", "missing"]), note: Text })
+          .object({ path: FilePath, status: DocStatus, note: Text })
           .strict(),
       )
       .min(1),
-    verdict: z.enum(["ok", "needs_changes"]),
+    verdict: DocsVerdict,
     notes: z.string().optional(),
   })
   .strict();
 
 export const DocsCheckInput = DocsCheckBase.superRefine((d, ctx) => {
-    const missing = d.items.some((i) => i.status === "missing");
-    if (missing !== (d.verdict === "needs_changes")) {
+    const missing = d.items.some((i) => i.status === DocStatus.enum.missing);
+    if (missing !== (d.verdict === DocsVerdict.enum.needs_changes)) {
       ctx.addIssue({
         code: "custom",
         path: ["verdict"],

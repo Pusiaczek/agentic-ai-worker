@@ -10,7 +10,7 @@ import { loadCtx } from "../core/project";
 import { findActiveTask, mutate, readState, taskPaths } from "../core/store";
 import { buildTestCommand, taskTestFiles } from "../core/tests";
 import type { Io } from "../io";
-import type { TaskState } from "../schema/state";
+import { RunState, type TaskState } from "../schema/state";
 import { parseArgs, str } from "../util/args";
 import { AwError, EXIT } from "../util/errors";
 import { ensureDir, nowIso, relativeToRoot } from "../util/fsx";
@@ -47,7 +47,7 @@ export function testCommand(argv: string[], io: Io): number {
     try {
       mutate(ref, (s) => {
         const r = s.runs.find((x) => x.id === run.id);
-        if (r?.state !== "active") return;
+        if (r?.state !== RunState.enum.active) return;
         r.testRuns.push({
           at: nowIso(),
           durationMs: res.durationMs,

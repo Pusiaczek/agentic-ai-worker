@@ -8,19 +8,25 @@ import { guardUninitialized, type HookInput, preToolUse } from "../hooks/guards"
 import { identify, isAwAgent } from "../hooks/identity";
 import { afterAgentCall, subagentStart, subagentStop } from "../hooks/lifecycle";
 import type { Io } from "../io";
+import { HookEvent } from "../schema/commands";
 import { EXIT } from "../util/errors";
 
 const emit = (io: Io, payload: unknown) => io.out(JSON.stringify(payload));
 
 export function hookCommand(argv: string[], io: Io): number {
-  const event = argv[0] ?? "";
+  const parsedEvent = HookEvent.safeParse(argv[0]);
+  if (!parsedEvent.success) {
+    io.err(`aw hook: unknown event "${argv[0] ?? ""}"`);
+    return EXIT.OK;
+  }
+  const event = parsedEvent.data;
   let input: HookInput;
   try {
     input = JSON.parse(io.readStdin() || "{}") as HookInput;
   } catch {
     return EXIT.OK;
   }
-  const guardedAgent = event === "pre-tool-use" && isAwAgent(identify(input.agent_type));
+  const guardedAgent = event === HookEvent.enum["pre-tool-use"] && isAwAgent(identify(input.agent_type));
   const failClosed = (message: string) => {
     if (guardedAgent) {
       emit(io, {
@@ -34,13 +40,13 @@ export function hookCommand(argv: string[], io: Io): number {
     const ctx = tryLoadCtx(input.cwd || io.cwd);
     if (!ctx) {
       // Repository doesn't use aw: only aw's own agents are stopped here.
-      const d = event === "pre-tool-use" ? guardUninitialized(input) : null;
+      const d = event === HookEvent.enum["pre-tool-use"] ? guardUninitialized(input) : null;
       if (d) {
         emit(io, {
           hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: d.permissionDecision, permissionDecisionReason: d.reason },
         });
       }
-      if (event === "subagent-start" && isAwAgent(identify(input.agent_type))) {
+      if (event === HookEvent.enum["subagent-start"] && isAwAgent(identify(input.agent_type))) {
         emit(io, {
           hookSpecificOutput: {
             hookEventName: "SubagentStart",
@@ -51,7 +57,7 @@ export function hookCommand(argv: string[], io: Io): number {
       return EXIT.OK;
     }
     switch (event) {
-      case "pre-tool-use": {
+      case HookEvent.enum["pre-tool-use"]: {
         const d = preToolUse(ctx, input);
         if (d) {
           emit(io, {
@@ -60,24 +66,21 @@ export function hookCommand(argv: string[], io: Io): number {
         }
         return EXIT.OK;
       }
-      case "post-tool-use": {
+      case HookEvent.enum["post-tool-use"]: {
         const context = afterAgentCall(ctx, input);
         if (context) emit(io, { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } });
         return EXIT.OK;
       }
-      case "subagent-start": {
+      case HookEvent.enum["subagent-start"]: {
         const context = subagentStart(ctx, input);
         if (context) emit(io, { hookSpecificOutput: { hookEventName: "SubagentStart", additionalContext: context } });
         return EXIT.OK;
       }
-      case "subagent-stop": {
+      case HookEvent.enum["subagent-stop"]: {
         const d = subagentStop(ctx, input);
         if (d) emit(io, d);
         return EXIT.OK;
       }
-      default:
-        io.err(`aw hook: unknown event "${event}"`);
-        return EXIT.OK;
     }
   } catch (e) {
     return failClosed((e as Error).message);

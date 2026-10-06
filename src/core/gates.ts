@@ -1,7 +1,7 @@
 /** Gates: repository commands (lint, tests, …) the CLI runs itself at submit time, so results don't depend on an agent's word. */
 import { spawnSync } from "node:child_process";
 import * as path from "node:path";
-import type { Gate } from "../schema/config";
+import { type Gate, GateExpectation } from "../schema/config";
 import type { GateResult } from "../schema/state";
 import { nowIso, tail, writeFileAtomic } from "../util/fsx";
 import { type Ctx, rel } from "./project";
@@ -59,7 +59,7 @@ function runGate(ctx: Ctx, ref: TaskRef, runId: string, gate: Gate, files: strin
   }
 
   const res = execLogged(ctx, command, path.join(taskPaths(ref).logs, `${runId}-${gate.run}.log`));
-  const ok = gate.expect === "pass" ? res.exitCode === 0 : res.exitCode !== null && res.exitCode !== 0 && !res.timedOut;
+  const ok = gate.expect === GateExpectation.enum.pass ? res.exitCode === 0 : res.exitCode !== null && res.exitCode !== 0 && !res.timedOut;
   return {
     ...base,
     command,

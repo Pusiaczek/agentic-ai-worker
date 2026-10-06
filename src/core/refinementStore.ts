@@ -4,7 +4,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { RefinementState } from "../schema/refinement";
+import { RefinementState, RefinementStatus } from "../schema/refinement";
 import { AwError, EXIT } from "../util/errors";
 import { nowIso } from "../util/fsx";
 import type { Ctx } from "./project";
@@ -92,7 +92,7 @@ export function mutateRefinement<T>(ref: RefinementRef, fn: (state: RefinementSt
 export function findWorkingRefinement(ctx: Ctx): { ref: RefinementRef; state: RefinementState } | null {
   for (const ref of listRefinements(ctx)) {
     const state = readRefinement(ref);
-    if (state.status === "WORKING") return { ref, state };
+    if (state.status === RefinementStatus.enum.WORKING) return { ref, state };
   }
   return null;
 }

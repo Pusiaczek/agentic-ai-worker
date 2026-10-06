@@ -21,29 +21,32 @@ import { type Ctx, loadCtx, rel } from "../core/project";
 import { findActiveTask, mutate, readState, requireActiveTask, type TaskRef, taskPaths, withLock, writeState } from "../core/store";
 import { checkCoder, checkReviewer, checkTester } from "../core/validate";
 import type { Io } from "../io";
-import type { Gate } from "../schema/config";
-import { type CoderOutput, INPUT_SCHEMAS, type ReviewerOutput, type TesterOutput } from "../schema/outputs";
-import type { GateResult, Run, TaskState } from "../schema/state";
-import { type Role, ROLE_STEPS, type Status, stepForReady, stepForWorking } from "../schema/status";
+import { RoleAction } from "../schema/commands";
+import { type Gate, GateMismatchPolicy } from "../schema/config";
+import { type CoderOutput, INPUT_SCHEMAS, type ReviewerOutput, ReviewVerdict, type TesterOutput } from "../schema/outputs";
+import { type GateResult, type Run, RunState, TaskEventName, type TaskState } from "../schema/state";
+import { Actor, Mode, ReviewTarget, Role, ROLE_STEPS, Status, stepForReady, stepForWorking } from "../schema/status";
 import { parseArgs, requireStr } from "../util/args";
 import { AwError, EXIT } from "../util/errors";
 import { ensureDir, fileSha256, nowIso } from "../util/fsx";
 import { formatIssues } from "../util/zod";
 
 export function roleCommand(role: Role, argv: string[], io: Io): number {
-  const [sub, ...rest] = argv;
+  const [word, ...rest] = argv;
+  const action = RoleAction.safeParse(word);
+  if (!action.success) {
+    throw new AwError(word ? `Unknown command: aw ${role} ${word}` : `Missing command.`, EXIT.USAGE, `Usage: aw ${role} start | submit | fail --reason "<why>"`);
+  }
   const ctx = loadCtx(io.cwd);
-  switch (sub) {
-    case "start": return start(ctx, role, io);
-    case "submit": return submit(ctx, role, io);
-    case "fail": return fail(ctx, role, requireStr(parseArgs(rest), "reason", `aw ${role} fail --reason "<why>"`), io);
-    default:
-      throw new AwError(sub ? `Unknown command: aw ${role} ${sub}` : `Missing command.`, EXIT.USAGE, `Usage: aw ${role} start | submit | fail --reason "<why>"`);
+  switch (action.data) {
+    case RoleAction.enum.start: return start(ctx, role, io);
+    case RoleAction.enum.submit: return submit(ctx, role, io);
+    case RoleAction.enum.fail: return fail(ctx, role, requireStr(parseArgs(rest), "reason", `aw ${role} fail --reason "<why>"`), io);
   }
 }
 
-function mismatch(role: Role, status: Status | null, action: string): AwError {
-  const allowed = ROLE_STEPS[role].map((s) => (action === "start" ? s.ready : s.working)).join(" or ");
+function mismatch(role: Role, status: Status | null, action: RoleAction): AwError {
+  const allowed = ROLE_STEPS[role].map((s) => (action === RoleAction.enum.start ? s.ready : s.working)).join(" or ");
   return new AwError(
     `STATUS MISMATCH — the ${role} cannot ${action}: ${status ? `task status is ${status}` : "there is no active task"}; ${action} requires ${allowed}.\n` +
       "Do NOT do any work. Reply to the orchestrator with this error in one line and stop.",
@@ -59,10 +62,10 @@ function releaseNotes(s: TaskState, runId: string): void {
 
 function start(ctx: Ctx, role: Role, io: Io): number {
   const ref = findActiveTask(ctx);
-  if (!ref) throw mismatch(role, null, "start");
+  if (!ref) throw mismatch(role, null, RoleAction.enum.start);
   const { s, run } = mutate(ref, (s) => {
     const step = stepForReady(role, s.status);
-    if (!step) throw mismatch(role, s.status, "start");
+    if (!step) throw mismatch(role, s.status, RoleAction.enum.start);
     const id = nextId(s, "run", "R");
     const notes = pendingNotes(s, role);
     for (const n of notes) n.consumedByRun = id;
@@ -84,8 +87,8 @@ function start(ctx: Ctx, role: Role, io: Io): number {
       ...(agentId ? { agentId } : {}),
     };
     const run: Run =
-      role === "reviewer" ? { role, target: step.target!, ...base }
-      : role === "tester" ? { role, ...base }
+      role === Role.enum.reviewer ? { role, target: step.target!, ...base }
+      : role === Role.enum.tester ? { role, ...base }
       : { role, ...base };
     s.runs.push(run);
     transition(s, step.working, role, `run ${id} started`);
@@ -108,7 +111,7 @@ function precheck(ctx: Ctx, ref: TaskRef, role: Role): Precheck {
   return withLock(ref, () => {
     const s = readState(ref);
     const run = activeRun(s);
-    if (!run || run.role !== role || !stepForWorking(role, s.status)) throw mismatch(role, s.status, "submit");
+    if (!run || run.role !== role || !stepForWorking(role, s.status)) throw mismatch(role, s.status, RoleAction.enum.submit);
     const max = ctx.config.limits.maxSubmitAttempts;
     if (run.submitAttempts.length >= max) {
       throw new AwError(`Submit attempt limit reached (${max}) for run ${run.id}.`, EXIT.VALIDATION, `Run \`aw ${role} fail --reason "<why>"\` and stop.`);
@@ -134,15 +137,15 @@ function precheck(ctx: Ctx, ref: TaskRef, role: Role): Precheck {
     let warnings: string[] = [];
     if (output) {
       const check =
-        run.role === "tester" ? checkTester(ctx, s, run, output as TesterOutput)
-        : run.role === "coder" ? checkCoder(ctx, s, run, output as CoderOutput)
+        run.role === Role.enum.tester ? checkTester(ctx, s, run, output as TesterOutput)
+        : run.role === Role.enum.coder ? checkCoder(ctx, s, run, output as CoderOutput)
         : checkReviewer(ctx, s, run, output as ReviewerOutput);
       errors.push(...check.errors);
       warnings = check.warnings;
     }
     if (errors.length || !output) {
       run.submitAttempts.push({ at: nowIso(), ok: false, errors });
-      addEvent(s, role, "submit_rejected", `${errors.length} error(s)`, run.id);
+      addEvent(s, role, TaskEventName.enum.submit_rejected, `${errors.length} error(s)`, run.id);
       writeState(ref, s);
       return { ok: false, errors, attempt: run.submitAttempts.length, max, outputFile: run.outputFile };
     }
@@ -153,13 +156,13 @@ function precheck(ctx: Ctx, ref: TaskRef, role: Role): Precheck {
 const unique = (xs: string[]) => [...new Set(xs)];
 
 function gatesFor(ctx: Ctx, role: Role, s: TaskState, output: Output): { gates: Gate[]; files: string[] } {
-  if (role === "tester") {
+  if (role === Role.enum.tester) {
     const o = output as TesterOutput;
     return { gates: ctx.config.gates.afterTests, files: unique([...o.tests.map((t) => t.file)]) };
   }
-  if (role === "coder") {
+  if (role === Role.enum.coder) {
     const o = output as CoderOutput;
-    const files = s.mode === "tdd" ? protectedTests(s).map((t) => t.file) : [];
+    const files = s.mode === Mode.enum.tdd ? protectedTests(s).map((t) => t.file) : [];
     return { gates: ctx.config.gates.afterCoding, files: unique([...files, ...o.testsAdded.map((t) => t.file)]) };
   }
   return { gates: [], files: [] };
@@ -178,51 +181,56 @@ function snapshotProtected(ctx: Ctx, ref: TaskRef, s: TaskState): void {
     fs.copyFileSync(abs, snapshot);
     return { path: f, sha256: fileSha256(abs)!, snapshot: rel(ctx, snapshot) };
   });
-  addEvent(s, "reviewer", "tests_protected", `${files.length} file(s) snapshotted`);
+  addEvent(s, Actor.enum.reviewer, TaskEventName.enum.tests_protected, `${files.length} file(s) snapshotted`);
 }
 
 /** Store the output with CLI-assigned ids and move the task to its next status. */
 function complete(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run, output: Output): string[] {
   const limits = ctx.config.limits;
   const lines: string[] = [];
-  if (run.role === "tester") {
+  if (run.role === Role.enum.tester) {
     const o = output as TesterOutput;
     run.output = { ...o, tests: o.tests.map((t) => ({ ...t, id: nextId(s, "test", "T") })) };
-    transition(s, "READY_FOR_TEST_REVIEW", "tester", `run ${run.id} submitted`);
+    transition(s, Status.enum.READY_FOR_TEST_REVIEW, Actor.enum.tester, `run ${run.id} submitted`);
     lines.push(`Tests registered: ${run.output.tests.map((t) => t.id).join(", ")}`);
-  } else if (run.role === "reviewer") {
+  } else if (run.role === Role.enum.reviewer) {
     const o = output as ReviewerOutput;
     run.output = { ...o, findings: o.findings.map((f) => ({ ...f, id: nextId(s, "finding", "F") })) };
-    const approved = o.verdict === "approve";
-    if (run.target === "tests") {
-      const done = submittedRuns(s, "tester").length;
+    const approved = o.verdict === ReviewVerdict.enum.approve;
+    if (run.target === ReviewTarget.enum.tests) {
+      const done = submittedRuns(s, Role.enum.tester).length;
       if (approved) {
         snapshotProtected(ctx, ref, s);
-        transition(s, "READY_FOR_CODING", "reviewer", "tests approved");
+        transition(s, Status.enum.READY_FOR_CODING, Actor.enum.reviewer, "tests approved");
       } else if (done >= limits.maxTestIterations) {
-        transition(s, "BLOCKED", "reviewer", `tests still need changes after ${done} tester iteration(s) (limit ${limits.maxTestIterations})`);
-      } else transition(s, "READY_FOR_TESTS", "reviewer", "changes requested on tests");
+        const reason = `tests still need changes after ${done} tester iteration(s) (limit ${limits.maxTestIterations})`;
+        transition(s, Status.enum.BLOCKED, Actor.enum.reviewer, reason);
+      } else transition(s, Status.enum.READY_FOR_TESTS, Actor.enum.reviewer, "changes requested on tests");
     } else {
-      const done = submittedRuns(s, "coder").length;
-      if (approved) transition(s, ctx.config.flow.docsCheck ? "DOCS_CHECK" : "AWAITING_ACCEPTANCE", "reviewer", "code approved");
-      else if (done >= limits.maxCodeIterations) {
-        transition(s, "BLOCKED", "reviewer", `code still needs changes after ${done} coder iteration(s) (limit ${limits.maxCodeIterations})`);
-      } else transition(s, "READY_FOR_CODING", "reviewer", "changes requested on code");
+      const done = submittedRuns(s, Role.enum.coder).length;
+      if (approved) {
+        const afterApproval = ctx.config.flow.docsCheck ? Status.enum.DOCS_CHECK : Status.enum.AWAITING_ACCEPTANCE;
+        transition(s, afterApproval, Actor.enum.reviewer, "code approved");
+      } else if (done >= limits.maxCodeIterations) {
+        const reason = `code still needs changes after ${done} coder iteration(s) (limit ${limits.maxCodeIterations})`;
+        transition(s, Status.enum.BLOCKED, Actor.enum.reviewer, reason);
+      } else transition(s, Status.enum.READY_FOR_CODING, Actor.enum.reviewer, "changes requested on code");
     }
     if (run.output.findings.length) lines.push(`Findings registered: ${run.output.findings.map((f) => `${f.id} (${f.severity})`).join(", ")}`);
   } else {
     const o = output as CoderOutput;
     run.output = o;
     if (o.testDisputes.length) {
-      transition(s, "BLOCKED", "coder", `test dispute: ${o.testDisputes.map((d) => `${d.testId}: ${d.reason}`).join("; ")}`);
-    } else transition(s, "READY_FOR_CODE_REVIEW", "coder", `run ${run.id} submitted`);
+      const disputes = o.testDisputes.map((dispute) => `${dispute.testId}: ${dispute.reason}`).join("; ");
+      transition(s, Status.enum.BLOCKED, Actor.enum.coder, `test dispute: ${disputes}`);
+    } else transition(s, Status.enum.READY_FOR_CODE_REVIEW, Actor.enum.coder, `run ${run.id} submitted`);
   }
   return lines;
 }
 
 function submit(ctx: Ctx, role: Role, io: Io): number {
   const ref = findActiveTask(ctx);
-  if (!ref) throw mismatch(role, null, "submit");
+  if (!ref) throw mismatch(role, null, RoleAction.enum.submit);
   const pre = precheck(ctx, ref, role);
   if (!pre.ok) {
     io.err(`Submission rejected (attempt ${pre.attempt}/${pre.max}). Fix ${pre.outputFile} and run \`aw ${role} submit\` again:`);
@@ -234,10 +242,10 @@ function submit(ctx: Ctx, role: Role, io: Io): number {
   // Gates run outside the lock: they can take minutes.
   const { gates: gateCfgs, files } = gatesFor(ctx, role, pre.state, pre.output);
   const results: GateResult[] = runGates(ctx, ref, pre.runId, gateCfgs, files);
-  const disputes = role === "coder" && (pre.output as CoderOutput).testDisputes.length > 0;
-  const rejected = results.filter((g, i) => !g.ok && gateCfgs[i]!.onMismatch === "reject");
+  const disputes = role === Role.enum.coder && (pre.output as CoderOutput).testDisputes.length > 0;
+  const rejected = results.filter((g, i) => !g.ok && gateCfgs[i]!.onMismatch === GateMismatchPolicy.enum.reject);
   const warned = results
-    .filter((g, i) => !g.ok && gateCfgs[i]!.onMismatch === "warn")
+    .filter((g, i) => !g.ok && gateCfgs[i]!.onMismatch === GateMismatchPolicy.enum.warn)
     .map((g) => `gate ${g.name} expected ${g.expect} but exit was ${g.exitCode ?? "none"} — see ${g.logFile}`);
 
   if (rejected.length && !disputes) {
@@ -245,7 +253,7 @@ function submit(ctx: Ctx, role: Role, io: Io): number {
       const run = activeRun(s)!;
       run.gates.push(...results);
       run.submitAttempts.push({ at: nowIso(), ok: false, errors: rejected.map(describeGate) });
-      addEvent(s, role, "gates_failed", rejected.map((g) => g.name).join(", "), run.id);
+      addEvent(s, role, TaskEventName.enum.gates_failed, rejected.map((g) => g.name).join(", "), run.id);
       return { attempt: run.submitAttempts.length, max: ctx.config.limits.maxSubmitAttempts };
     });
     io.err(`Submission rejected (attempt ${attempt}/${max}): gate(s) failed.`);
@@ -260,7 +268,7 @@ function submit(ctx: Ctx, role: Role, io: Io): number {
     run.gates.push(...results);
     run.warnings.push(...pre.warnings, ...warned);
     run.submitAttempts.push({ at: nowIso(), ok: true, errors: [] });
-    run.state = "submitted";
+    run.state = RunState.enum.submitted;
     run.finishedAt = nowIso();
     const lines = complete(ctx, ref, s, run, pre.output);
     return { status: s.status, lines, runId: run.id };
@@ -280,12 +288,12 @@ function fail(ctx: Ctx, role: Role, reason: string, io: Io): number {
   const ref = requireActiveTask(ctx);
   const runId = mutate(ref, (s) => {
     const run = activeRun(s);
-    if (!run || run.role !== role || !stepForWorking(role, s.status)) throw mismatch(role, s.status, "fail");
-    run.state = "failed";
+    if (!run || run.role !== role || !stepForWorking(role, s.status)) throw mismatch(role, s.status, RoleAction.enum.fail);
+    run.state = RunState.enum.failed;
     run.failReason = reason;
     run.finishedAt = nowIso();
     releaseNotes(s, run.id);
-    transition(s, "BLOCKED", role, `${role} ${run.id} failed: ${reason}`);
+    transition(s, Status.enum.BLOCKED, role, `${role} ${run.id} failed: ${reason}`);
     return run.id;
   });
   io.out(`Recorded: run ${runId} failed. Task is BLOCKED until the user decides.`);

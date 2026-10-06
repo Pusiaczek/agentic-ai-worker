@@ -1,6 +1,6 @@
 /** Human-readable views generated from state: plan.md (for approval) and report.md (for the archive). */
 import type { PlanRevision, Run, TaskState } from "../schema/state";
-import type { Role } from "../schema/status";
+import { Role } from "../schema/status";
 import { describeGate } from "./gates";
 import { describeFinding, submittedRuns } from "./machine";
 
@@ -31,8 +31,8 @@ const minutes = (a?: string, b?: string) =>
   a && b ? `${Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 60000))} min` : "—";
 
 function runHeadline(r: Run): string {
-  const what = r.role === "reviewer" ? `reviewer (${r.target})` : r.role;
-  const verdict = r.role === "reviewer" && r.output ? ` · ${r.output.verdict}` : "";
+  const what = r.role === Role.enum.reviewer ? `reviewer (${r.target})` : r.role;
+  const verdict = r.role === Role.enum.reviewer && r.output ? ` · ${r.output.verdict}` : "";
   const rejects = r.submitAttempts.filter((a) => !a.ok).length;
   const testSeconds = Math.round(r.testRuns.reduce((sum, t) => sum + t.durationMs, 0) / 1000);
   return `### ${r.id} · ${what} · iteration ${r.iteration} · ${r.state}${verdict} · ${minutes(r.startedAt, r.finishedAt)}${
@@ -48,17 +48,17 @@ function renderRun(r: Run, out: string[]): void {
   const o = r.output;
   if (!o) return;
   out.push("", o.summary);
-  if (r.role === "tester" && r.output) {
+  if (r.role === Role.enum.tester && r.output) {
     for (const t of r.output.tests) out.push(`- ${t.id} [${t.kind}${t.edgeCase ? ", edge" : ""}; ${t.covers.join(", ")}] \`${t.file}\` — ${t.title}`);
     for (const u of r.output.untestedCriteria) out.push(`- Untested: ${u.ac} — ${u.reason}`);
   }
-  if (r.role === "reviewer" && r.output) {
+  if (r.role === Role.enum.reviewer && r.output) {
     for (const f of r.output.findings) out.push(`- ${describeFinding(f)}`);
     for (const p of r.output.previousFindings) out.push(`- ${p.id}: ${p.status}${p.note ? ` — ${p.note}` : ""}`);
     const cov = r.output.acCoverage.map((c) => `${c.ac} ${c.verdict}`).join(", ");
     if (cov) out.push(`- Coverage: ${cov}`);
   }
-  if (r.role === "coder" && r.output) {
+  if (r.role === Role.enum.coder && r.output) {
     for (const f of r.output.filesChanged) out.push(`- ${f.change} \`${f.path}\` — ${f.why}`);
     for (const d of r.output.decisions) out.push(`- Decision: ${d.decision} — ${d.rationale}`);
     for (const d of r.output.deviationsFromPlan) out.push(`- Deviation: ${d.what} — ${d.why}`);
@@ -74,12 +74,13 @@ function renderRun(r: Run, out: string[]): void {
 export function renderReport(s: TaskState): string {
   const plan = s.plans.find((p) => p.revision === s.approvedPlanRevision) ?? s.plans.at(-1);
   const count = (role: Role) => submittedRuns(s, role).length;
+  const iterations = `tests ${count(Role.enum.tester)}, code ${count(Role.enum.coder)}`;
   const out: string[] = [
     `# ${s.id} · ${s.title}`,
     "",
     `- Status: **${s.status}** · mode: ${s.mode} · source: ${s.source.kind}${s.source.ref ? ` (${s.source.ref})` : ""}`,
     `- Created: ${s.createdAt} · finished: ${s.acceptedAt ?? s.updatedAt} · duration: ${minutes(s.createdAt, s.acceptedAt ?? s.updatedAt)}`,
-    `- Iterations: tests ${count("tester")}, code ${count("coder")} · plan revisions: ${s.plans.length} · runs: ${s.runs.length}`,
+    `- Iterations: ${iterations} · plan revisions: ${s.plans.length} · runs: ${s.runs.length}`,
   ];
   if (plan) {
     out.push("", "## Plan (approved revision)", plan.summary, "", ...plan.acceptanceCriteria.map((a) => `- **${a.id}** ${a.text}`));
@@ -92,7 +93,7 @@ export function renderReport(s: TaskState): string {
       out.push(`- ${d.at} · ${d.verdict}`, ...d.items.map((i) => `  - \`${i.path}\`: ${i.status} — ${i.note}`));
     }
   }
-  const followUps = s.runs.flatMap((r) => (r.role === "reviewer" && r.output ? r.output.followUps : []));
+  const followUps = s.runs.flatMap((r) => (r.role === Role.enum.reviewer && r.output ? r.output.followUps : []));
   if (followUps.length) out.push("", "## Follow-ups", ...followUps.map((f) => `- ${f.text}`));
   if (s.retro) {
     out.push("", "## Retro");

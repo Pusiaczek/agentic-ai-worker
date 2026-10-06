@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { type Config, DirectTestCommands } from "../schema/config";
 import type { TaskState } from "../schema/state";
+import { Role } from "../schema/status";
 import { AwError, EXIT } from "../util/errors";
 import { globMatcher } from "../util/glob";
 import { quoteArg, quoteFile } from "./gates";
@@ -21,7 +22,7 @@ export function taskTestFiles(ctx: Ctx, s: TaskState): string[] {
   const isTestPath = globMatcher(ctx.config.tests.globs);
   const candidates = new Set<string>(s.protectedFiles.map((p) => p.path));
   for (const t of latestSubmittedTester(s)?.output?.tests ?? []) candidates.add(t.file);
-  for (const r of s.runs) if (r.role === "coder" && r.output) for (const t of r.output.testsAdded) candidates.add(t.file);
+  for (const r of s.runs) if (r.role === Role.enum.coder && r.output) for (const t of r.output.testsAdded) candidates.add(t.file);
   for (const f of changedFiles(ctx.root, s.git.baseRef)) if (isTestPath(f)) candidates.add(f);
   const existing = [...candidates].filter((f) => fs.existsSync(path.join(ctx.root, f)));
   const specs = existing.filter((f) => SPEC_FILE.test(f));

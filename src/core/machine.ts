@@ -1,7 +1,18 @@
 /** State-machine operations and read helpers over TaskState. Pure: no I/O. */
-import { isBlocking } from "../schema/outputs";
-import type { Note, PlanRevision, ReviewerRun, Run, StoredFinding, StoredTest, TaskState, TesterRun } from "../schema/state";
-import { type Actor, type Mode, type ReviewTarget, type Role, type Status, TRANSITIONS } from "../schema/status";
+import { isBlocking, PreviousFindingStatus } from "../schema/outputs";
+import {
+  type Note,
+  type PlanRevision,
+  type ReviewerRun,
+  type Run,
+  RunState,
+  type StoredFinding,
+  type StoredTest,
+  type TaskEventName,
+  type TaskState,
+  type TesterRun,
+} from "../schema/state";
+import { type Actor, Mode, type ReviewTarget, Role, Status, TRANSITIONS } from "../schema/status";
 import { AwError } from "../util/errors";
 import { nowIso } from "../util/fsx";
 
@@ -12,12 +23,12 @@ export function transition(s: TaskState, to: Status, by: Actor, note?: string): 
   }
   const at = nowIso();
   s.history.push({ type: "transition", at, by, from, to, ...(note ? { note } : {}) });
-  if (to === "BLOCKED") s.blocked = { from, reason: note ?? "", by, at };
-  else if (from === "BLOCKED") delete s.blocked;
+  if (to === Status.enum.BLOCKED) s.blocked = { from, reason: note ?? "", by, at };
+  else if (from === Status.enum.BLOCKED) delete s.blocked;
   s.status = to;
 }
 
-export function addEvent(s: TaskState, by: Actor, event: string, note?: string, runId?: string): void {
+export function addEvent(s: TaskState, by: Actor, event: TaskEventName, note?: string, runId?: string): void {
   s.history.push({ type: "event", at: nowIso(), by, event, ...(note ? { note } : {}), ...(runId ? { runId } : {}) });
 }
 
@@ -27,7 +38,7 @@ export function nextId(s: TaskState, counter: keyof TaskState["counters"], prefi
 }
 
 export function firstWorkStatus(mode: Mode): Status {
-  return mode === "tdd" ? "READY_FOR_TESTS" : "READY_FOR_CODING";
+  return mode === Mode.enum.tdd ? Status.enum.READY_FOR_TESTS : Status.enum.READY_FOR_CODING;
 }
 
 export function currentPlan(s: TaskState): PlanRevision | undefined {
@@ -40,11 +51,11 @@ export function acIds(s: TaskState): string[] {
 }
 
 export function runsOf(s: TaskState, role: Role, target?: ReviewTarget): Run[] {
-  return s.runs.filter((r) => r.role === role && (target === undefined || (r.role === "reviewer" && r.target === target)));
+  return s.runs.filter((r) => r.role === role && (target === undefined || (r.role === Role.enum.reviewer && r.target === target)));
 }
 
 export function submittedRuns(s: TaskState, role: Role, target?: ReviewTarget): Run[] {
-  return runsOf(s, role, target).filter((r) => r.state === "submitted");
+  return runsOf(s, role, target).filter((r) => r.state === RunState.enum.submitted);
 }
 
 export function latestRun(s: TaskState, role: Role, target?: ReviewTarget): Run | undefined {
@@ -52,15 +63,15 @@ export function latestRun(s: TaskState, role: Role, target?: ReviewTarget): Run 
 }
 
 export function activeRun(s: TaskState): Run | undefined {
-  return s.runs.find((r) => r.state === "active");
+  return s.runs.find((r) => r.state === RunState.enum.active);
 }
 
 export function latestSubmittedTester(s: TaskState): TesterRun | undefined {
-  return submittedRuns(s, "tester").at(-1) as TesterRun | undefined;
+  return submittedRuns(s, Role.enum.tester).at(-1) as TesterRun | undefined;
 }
 
 export function latestSubmittedReview(s: TaskState, target: ReviewTarget): ReviewerRun | undefined {
-  return submittedRuns(s, "reviewer", target).at(-1) as ReviewerRun | undefined;
+  return submittedRuns(s, Role.enum.reviewer, target).at(-1) as ReviewerRun | undefined;
 }
 
 /** Tests the coder must make pass: the latest accepted tester output. */
@@ -76,10 +87,10 @@ export type OpenFinding = StoredFinding & { runId: string };
  */
 export function openBlockingFindings(s: TaskState, target: ReviewTarget): OpenFinding[] {
   const open = new Map<string, OpenFinding>();
-  for (const run of submittedRuns(s, "reviewer", target) as ReviewerRun[]) {
+  for (const run of submittedRuns(s, Role.enum.reviewer, target) as ReviewerRun[]) {
     if (!run.output) continue;
     for (const pf of run.output.previousFindings) {
-      if (pf.status !== "not_fixed") open.delete(pf.id);
+      if (pf.status !== PreviousFindingStatus.enum.not_fixed) open.delete(pf.id);
     }
     for (const f of run.output.findings) {
       if (isBlocking(f.severity)) open.set(f.id, { ...f, runId: run.id });

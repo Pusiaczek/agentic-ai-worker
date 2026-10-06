@@ -21634,10 +21634,12 @@ var DEFAULT_REVIEWER_BASH = [
   "pwd",
   "echo"
 ];
+var GateExpectation = external_exports.enum(["pass", "fail"]);
+var GateMismatchPolicy = external_exports.enum(["reject", "warn"]);
 var Gate = external_exports.object({
   run: external_exports.string().min(1).describe("Key in `commands`. `{files}` in that command is replaced with the relevant test files."),
-  expect: external_exports.enum(["pass", "fail"]).default("pass"),
-  onMismatch: external_exports.enum(["reject", "warn"]).default("reject").describe("reject = submit is refused; warn = recorded for the reviewer.")
+  expect: GateExpectation.default("pass"),
+  onMismatch: GateMismatchPolicy.default("reject").describe("reject = submit is refused; warn = recorded for the reviewer.")
 }).strict();
 var ResumePolicy = external_exports.enum(["always", "never", "on-dispute"]);
 var agentPolicy = (resume, bashAllow) => external_exports.object({
@@ -21775,8 +21777,12 @@ function formatIssues(error62) {
     return `${where}: ${issue2.message}`;
   });
 }
-function formatPath(p) {
-  return p.map((seg, i) => typeof seg === "number" ? `[${seg}]` : i === 0 ? String(seg) : `.${String(seg)}`).join("");
+function formatPath(segments) {
+  return segments.map(formatPathSegment).join("");
+}
+function formatPathSegment(segment, index) {
+  if (typeof segment === "number") return `[${segment}]`;
+  return index === 0 ? String(segment) : `.${String(segment)}`;
 }
 
 // src/core/project.ts
@@ -21909,7 +21915,7 @@ var FindingInput = FindingBase.superRefine((f, ctx) => {
   if (f.endLine !== void 0 && (f.line === void 0 || f.endLine < f.line)) {
     ctx.addIssue({ code: "custom", path: ["endLine"], message: "endLine requires line and must be >= line" });
   }
-  if (f.category === "maintainability" && isBlocking(f.severity) && !f.evidence) {
+  if (f.category === FindingCategory.enum.maintainability && isBlocking(f.severity) && !f.evidence) {
     ctx.addIssue({
       code: "custom",
       path: ["evidence"],
@@ -21917,26 +21923,30 @@ var FindingInput = FindingBase.superRefine((f, ctx) => {
     });
   }
 });
+var ReviewVerdict = external_exports.enum(["approve", "changes_requested"]);
+var PreviousFindingStatus = external_exports.enum(["fixed", "not_fixed", "no_longer_applicable"]);
+var CoverageVerdict = external_exports.enum(["covered", "partial", "missing"]);
 var ReviewerOutput = external_exports.object({
   ...common,
-  verdict: external_exports.enum(["approve", "changes_requested"]),
+  verdict: ReviewVerdict,
   findings: external_exports.array(FindingInput).default([]),
   previousFindings: external_exports.array(
     external_exports.object({
       id: FindingId,
-      status: external_exports.enum(["fixed", "not_fixed", "no_longer_applicable"]),
+      status: PreviousFindingStatus,
       note: Text.optional()
     }).strict()
   ).default([]).describe("Your verdict on every blocking finding still open from the previous review round."),
   acCoverage: external_exports.array(
-    external_exports.object({ ac: AcId, verdict: external_exports.enum(["covered", "partial", "missing"]), note: Text.optional() }).strict()
+    external_exports.object({ ac: AcId, verdict: CoverageVerdict, note: Text.optional() }).strict()
   ).describe("One entry per acceptance criterion."),
   followUps: external_exports.array(external_exports.object({ text: Text, category: FindingCategory.optional() }).strict()).default([]).describe("Non-blocking ideas for later (refactors, extensions). They go to the backlog, not to the coder.")
 }).strict();
+var FileChange = external_exports.enum(["added", "modified", "deleted", "renamed"]);
 var CoderOutput = external_exports.object({
   ...common,
   filesChanged: external_exports.array(
-    external_exports.object({ path: FilePath, change: external_exports.enum(["added", "modified", "deleted", "renamed"]), why: Text }).strict()
+    external_exports.object({ path: FilePath, change: FileChange, why: Text }).strict()
   ).min(1),
   decisions: external_exports.array(external_exports.object({ decision: Text, rationale: Text, alternatives: external_exports.array(Text).default([]) }).strict()).default([]),
   deviationsFromPlan: external_exports.array(external_exports.object({ what: Text, why: Text }).strict()).default([]),
@@ -21958,16 +21968,18 @@ var PlanInput = external_exports.object({
   outOfScope: external_exports.array(Text).default([]),
   risks: external_exports.array(Text).default([])
 }).strict();
+var DocStatus = external_exports.enum(["updated", "not_needed", "missing"]);
+var DocsVerdict = external_exports.enum(["ok", "needs_changes"]);
 var DocsCheckBase = external_exports.object({
   items: external_exports.array(
-    external_exports.object({ path: FilePath, status: external_exports.enum(["updated", "not_needed", "missing"]), note: Text }).strict()
+    external_exports.object({ path: FilePath, status: DocStatus, note: Text }).strict()
   ).min(1),
-  verdict: external_exports.enum(["ok", "needs_changes"]),
+  verdict: DocsVerdict,
   notes: external_exports.string().optional()
 }).strict();
 var DocsCheckInput = DocsCheckBase.superRefine((d, ctx) => {
-  const missing = d.items.some((i) => i.status === "missing");
-  if (missing !== (d.verdict === "needs_changes")) {
+  const missing = d.items.some((i) => i.status === DocStatus.enum.missing);
+  if (missing !== (d.verdict === DocsVerdict.enum.needs_changes)) {
     ctx.addIssue({
       code: "custom",
       path: ["verdict"],
@@ -22020,87 +22032,6 @@ var INPUT_SCHEMAS = {
   refine: RefineOutput
 };
 
-// src/core/machine.ts
-function transition(s, to, by, note) {
-  const from = s.status;
-  if (!TRANSITIONS[from].includes(to)) {
-    throw new AwError(`Illegal transition ${from} \u2192 ${to}. Allowed from ${from}: ${TRANSITIONS[from].join(", ") || "none"}.`);
-  }
-  const at = nowIso();
-  s.history.push({ type: "transition", at, by, from, to, ...note ? { note } : {} });
-  if (to === "BLOCKED") s.blocked = { from, reason: note ?? "", by, at };
-  else if (from === "BLOCKED") delete s.blocked;
-  s.status = to;
-}
-function addEvent(s, by, event, note, runId) {
-  s.history.push({ type: "event", at: nowIso(), by, event, ...note ? { note } : {}, ...runId ? { runId } : {} });
-}
-function nextId(s, counter, prefix) {
-  s.counters[counter] += 1;
-  return `${prefix}-${s.counters[counter]}`;
-}
-function firstWorkStatus(mode) {
-  return mode === "tdd" ? "READY_FOR_TESTS" : "READY_FOR_CODING";
-}
-function currentPlan(s) {
-  if (s.approvedPlanRevision !== void 0) return s.plans.find((p) => p.revision === s.approvedPlanRevision);
-  return s.plans.at(-1);
-}
-function acIds(s) {
-  return currentPlan(s)?.acceptanceCriteria.map((a) => a.id) ?? [];
-}
-function runsOf(s, role, target) {
-  return s.runs.filter((r) => r.role === role && (target === void 0 || r.role === "reviewer" && r.target === target));
-}
-function submittedRuns(s, role, target) {
-  return runsOf(s, role, target).filter((r) => r.state === "submitted");
-}
-function latestRun(s, role, target) {
-  return runsOf(s, role, target).at(-1);
-}
-function activeRun(s) {
-  return s.runs.find((r) => r.state === "active");
-}
-function latestSubmittedTester(s) {
-  return submittedRuns(s, "tester").at(-1);
-}
-function latestSubmittedReview(s, target) {
-  return submittedRuns(s, "reviewer", target).at(-1);
-}
-function protectedTests(s) {
-  return latestSubmittedTester(s)?.output?.tests ?? [];
-}
-function openBlockingFindings(s, target) {
-  const open2 = /* @__PURE__ */ new Map();
-  for (const run2 of submittedRuns(s, "reviewer", target)) {
-    if (!run2.output) continue;
-    for (const pf of run2.output.previousFindings) {
-      if (pf.status !== "not_fixed") open2.delete(pf.id);
-    }
-    for (const f of run2.output.findings) {
-      if (isBlocking(f.severity)) open2.set(f.id, { ...f, runId: run2.id });
-    }
-  }
-  return [...open2.values()];
-}
-function pendingNotes(s, role) {
-  return s.notes.filter((n) => n.forRole === role && !n.consumedByRun);
-}
-function addNote(s, forRole, source, text, by) {
-  const note = { id: nextId(s, "note", "N"), forRole, source, text, by, at: nowIso() };
-  s.notes.push(note);
-  return note;
-}
-function describeFinding(f) {
-  const lines = f.line ? `:${f.line}${f.endLine ? `-${f.endLine}` : ""}` : "";
-  const where = f.file ? `${f.file}${lines}${f.symbol ? ` (${f.symbol})` : ""}` : f.symbol ? `(${f.symbol})` : "whole change";
-  return `${f.id} [${f.severity}/${f.category}] ${where} \u2014 ${f.message}${f.suggestion ? ` (suggestion: ${f.suggestion})` : ""}`;
-}
-
-// src/core/refinementStore.ts
-import * as fs4 from "node:fs";
-import * as path3 from "node:path";
-
 // src/schema/state.ts
 var Iso = external_exports.string().min(1);
 var RunId = external_exports.string().regex(/^R-\d+$/);
@@ -22113,10 +22044,25 @@ var Transition = external_exports.object({
   to: Status,
   note: external_exports.string().optional()
 });
+var TaskEventName = external_exports.enum([
+  "task_created",
+  "plan_revised",
+  "agent_spawned",
+  "tests_protected",
+  "gates_failed",
+  "submit_rejected",
+  "stop_blocked",
+  "final_message_too_long",
+  "agent_stopped",
+  "agent_stopped_without_submit",
+  "state_repaired",
+  "archived"
+]);
 var HistoryEvent = external_exports.object({
   type: external_exports.literal("event"),
   at: Iso,
   by: Actor,
+  /** Written as a TaskEventName. Read as any string, so archives with event names from older versions still load. */
   event: external_exports.string(),
   note: external_exports.string().optional(),
   runId: RunId.optional()
@@ -22125,7 +22071,7 @@ var HistoryEntry = external_exports.discriminatedUnion("type", [Transition, Hist
 var GateResult = external_exports.object({
   name: external_exports.string(),
   command: external_exports.string(),
-  expect: external_exports.enum(["pass", "fail"]),
+  expect: GateExpectation,
   exitCode: external_exports.number().int().nullable(),
   ok: external_exports.boolean(),
   skipped: external_exports.boolean(),
@@ -22149,10 +22095,11 @@ var TestRun = external_exports.object({
   pattern: external_exports.string().optional(),
   logFile: external_exports.string().optional()
 });
+var RunState = external_exports.enum(["active", "submitted", "failed", "abandoned"]);
 var runCommon = {
   id: RunId,
   iteration: external_exports.number().int().positive(),
-  state: external_exports.enum(["active", "submitted", "failed", "abandoned"]),
+  state: RunState,
   startedAt: Iso,
   finishedAt: Iso.optional(),
   outputFile: external_exports.string(),
@@ -22182,10 +22129,11 @@ var PlanRevision = PlanInput.omit({ acceptanceCriteria: true }).extend({
   createdAt: Iso,
   acceptanceCriteria: external_exports.array(external_exports.object({ id: AcId, text: external_exports.string() }))
 });
+var NoteSource = external_exports.enum(["user", "scrum-master", "docs-check", "dispute", "block"]);
 var Note = external_exports.object({
   id: NoteId,
   forRole: Role,
-  source: external_exports.enum(["user", "scrum-master", "docs-check", "dispute", "block"]),
+  source: NoteSource,
   text: external_exports.string(),
   by: Actor,
   at: Iso,
@@ -22222,15 +22170,17 @@ var TaskState = external_exports.object({
     note: external_exports.number().int()
   })
 });
+var BacklogKind = external_exports.enum(["followUp", "processNote", "processImprovement"]);
+var BacklogStatus = external_exports.enum(["open", "accepted", "ticket", "done", "rejected"]);
 var BacklogItem = external_exports.object({
   id: external_exports.string().regex(/^B-\d+$/),
-  kind: external_exports.enum(["followUp", "processNote", "processImprovement"]),
+  kind: BacklogKind,
   text: external_exports.string(),
   taskId: TaskId,
   runId: RunId.optional(),
   role: external_exports.string().optional(),
   createdAt: Iso,
-  status: external_exports.enum(["open", "accepted", "ticket", "done", "rejected"]),
+  status: BacklogStatus,
   note: external_exports.string().optional(),
   updatedAt: Iso.optional()
 });
@@ -22239,6 +22189,87 @@ var Backlog = external_exports.object({
   counter: external_exports.number().int(),
   items: external_exports.array(BacklogItem)
 });
+
+// src/core/machine.ts
+function transition(s, to, by, note) {
+  const from = s.status;
+  if (!TRANSITIONS[from].includes(to)) {
+    throw new AwError(`Illegal transition ${from} \u2192 ${to}. Allowed from ${from}: ${TRANSITIONS[from].join(", ") || "none"}.`);
+  }
+  const at = nowIso();
+  s.history.push({ type: "transition", at, by, from, to, ...note ? { note } : {} });
+  if (to === Status.enum.BLOCKED) s.blocked = { from, reason: note ?? "", by, at };
+  else if (from === Status.enum.BLOCKED) delete s.blocked;
+  s.status = to;
+}
+function addEvent(s, by, event, note, runId) {
+  s.history.push({ type: "event", at: nowIso(), by, event, ...note ? { note } : {}, ...runId ? { runId } : {} });
+}
+function nextId(s, counter, prefix) {
+  s.counters[counter] += 1;
+  return `${prefix}-${s.counters[counter]}`;
+}
+function firstWorkStatus(mode) {
+  return mode === Mode.enum.tdd ? Status.enum.READY_FOR_TESTS : Status.enum.READY_FOR_CODING;
+}
+function currentPlan(s) {
+  if (s.approvedPlanRevision !== void 0) return s.plans.find((p) => p.revision === s.approvedPlanRevision);
+  return s.plans.at(-1);
+}
+function acIds(s) {
+  return currentPlan(s)?.acceptanceCriteria.map((a) => a.id) ?? [];
+}
+function runsOf(s, role, target) {
+  return s.runs.filter((r) => r.role === role && (target === void 0 || r.role === Role.enum.reviewer && r.target === target));
+}
+function submittedRuns(s, role, target) {
+  return runsOf(s, role, target).filter((r) => r.state === RunState.enum.submitted);
+}
+function latestRun(s, role, target) {
+  return runsOf(s, role, target).at(-1);
+}
+function activeRun(s) {
+  return s.runs.find((r) => r.state === RunState.enum.active);
+}
+function latestSubmittedTester(s) {
+  return submittedRuns(s, Role.enum.tester).at(-1);
+}
+function latestSubmittedReview(s, target) {
+  return submittedRuns(s, Role.enum.reviewer, target).at(-1);
+}
+function protectedTests(s) {
+  return latestSubmittedTester(s)?.output?.tests ?? [];
+}
+function openBlockingFindings(s, target) {
+  const open2 = /* @__PURE__ */ new Map();
+  for (const run2 of submittedRuns(s, Role.enum.reviewer, target)) {
+    if (!run2.output) continue;
+    for (const pf of run2.output.previousFindings) {
+      if (pf.status !== PreviousFindingStatus.enum.not_fixed) open2.delete(pf.id);
+    }
+    for (const f of run2.output.findings) {
+      if (isBlocking(f.severity)) open2.set(f.id, { ...f, runId: run2.id });
+    }
+  }
+  return [...open2.values()];
+}
+function pendingNotes(s, role) {
+  return s.notes.filter((n) => n.forRole === role && !n.consumedByRun);
+}
+function addNote(s, forRole, source, text, by) {
+  const note = { id: nextId(s, "note", "N"), forRole, source, text, by, at: nowIso() };
+  s.notes.push(note);
+  return note;
+}
+function describeFinding(f) {
+  const lines = f.line ? `:${f.line}${f.endLine ? `-${f.endLine}` : ""}` : "";
+  const where = f.file ? `${f.file}${lines}${f.symbol ? ` (${f.symbol})` : ""}` : f.symbol ? `(${f.symbol})` : "whole change";
+  return `${f.id} [${f.severity}/${f.category}] ${where} \u2014 ${f.message}${f.suggestion ? ` (suggestion: ${f.suggestion})` : ""}`;
+}
+
+// src/core/refinementStore.ts
+import * as fs4 from "node:fs";
+import * as path3 from "node:path";
 
 // src/schema/refinement.ts
 var Iso2 = external_exports.string().min(1);
@@ -22272,9 +22303,10 @@ var RefinementRevision = external_exports.object({
   processNotes: external_exports.array(external_exports.string()),
   addressedNotes: external_exports.array(external_exports.object({ noteId: NoteId, note: external_exports.string() }))
 });
+var RefinementRunState = external_exports.enum(["active", "submitted", "abandoned"]);
 var RefinementRun = external_exports.object({
   id: RunId,
-  state: external_exports.enum(["active", "submitted", "abandoned"]),
+  state: RefinementRunState,
   startedAt: Iso2,
   finishedAt: Iso2.optional(),
   agentId: external_exports.string().optional(),
@@ -22292,17 +22324,31 @@ var RefinementNote = external_exports.object({
   consumedByRun: RunId.optional()
 });
 var RefinementActor = external_exports.enum(["user", "scrum-master", "product-owner", "hook"]);
+var RefinementEventName = external_exports.enum([
+  "refinement_created",
+  "agent_started",
+  "agent_spawned",
+  "stop_blocked",
+  "agent_stopped_without_submit",
+  "proposal_submitted",
+  "note_added",
+  "agent_reset",
+  "approved",
+  "cancelled"
+]);
 var RefinementEvent = external_exports.object({
   at: Iso2,
   by: RefinementActor,
+  /** Written as a RefinementEventName. Read as any string, so files with event names from older versions still load. */
   event: external_exports.string(),
   note: external_exports.string().optional()
 });
+var RefinementSourceKind = external_exports.enum(["manual", "file"]);
 var RefinementState = external_exports.object({
   schemaVersion: external_exports.literal(1),
   id: RefinementId,
   title: external_exports.string().min(1),
-  source: external_exports.object({ kind: external_exports.enum(["manual", "file"]), ref: external_exports.string().optional() }),
+  source: external_exports.object({ kind: RefinementSourceKind, ref: external_exports.string().optional() }),
   status: RefinementStatus,
   createdAt: Iso2,
   updatedAt: Iso2,
@@ -22442,7 +22488,7 @@ function mutateRefinement(ref, fn) {
 function findWorkingRefinement(ctx) {
   for (const ref of listRefinements(ctx)) {
     const state = readRefinement(ref);
-    if (state.status === "WORKING") return { ref, state };
+    if (state.status === RefinementStatus.enum.WORKING) return { ref, state };
   }
   return null;
 }
@@ -22584,7 +22630,7 @@ function runGate(ctx, ref, runId, gate, files) {
     command = command.replaceAll("{files}", files.map(quoteFile).join(" "));
   }
   const res = execLogged(ctx, command, path5.join(taskPaths(ref).logs, `${runId}-${gate.run}.log`));
-  const ok = gate.expect === "pass" ? res.exitCode === 0 : res.exitCode !== null && res.exitCode !== 0 && !res.timedOut;
+  const ok = gate.expect === GateExpectation.enum.pass ? res.exitCode === 0 : res.exitCode !== null && res.exitCode !== 0 && !res.timedOut;
   return {
     ...base,
     command,
@@ -22669,7 +22715,7 @@ function taskTestFiles(ctx, s) {
   const isTestPath = globMatcher(ctx.config.tests.globs);
   const candidates = new Set(s.protectedFiles.map((p) => p.path));
   for (const t of latestSubmittedTester(s)?.output?.tests ?? []) candidates.add(t.file);
-  for (const r of s.runs) if (r.role === "coder" && r.output) for (const t of r.output.testsAdded) candidates.add(t.file);
+  for (const r of s.runs) if (r.role === Role.enum.coder && r.output) for (const t of r.output.testsAdded) candidates.add(t.file);
   for (const f of changedFiles(ctx.root, s.git.baseRef)) if (isTestPath(f)) candidates.add(f);
   const existing = [...candidates].filter((f) => fs7.existsSync(path7.join(ctx.root, f)));
   const specs = existing.filter((f) => SPEC_FILE.test(f));
@@ -22699,18 +22745,85 @@ function testCommandPrefixes(config2) {
   return [.../* @__PURE__ */ new Set([...config2.guards.testCommandPrefixes, ...configured])].filter(Boolean);
 }
 
+// src/schema/commands.ts
+var AwCommand = external_exports.enum([
+  "sm",
+  "tester",
+  "reviewer",
+  "coder",
+  "test",
+  "refine",
+  "show",
+  "schema",
+  "backlog",
+  "stats",
+  "doctor",
+  "init",
+  "hook",
+  "version",
+  "help"
+]);
+var SmAction = external_exports.enum([
+  "new",
+  "plan",
+  "approve",
+  "next",
+  "note",
+  "block",
+  "unblock",
+  "cancel",
+  "reset",
+  "docs",
+  "accept",
+  "reopen",
+  "archive",
+  "repair"
+]);
+var RoleAction = external_exports.enum(["start", "submit", "fail"]);
+var RefineAction = external_exports.enum(["new", "next", "start-agent", "submit", "note", "approve", "cancel", "reset", "show"]);
+var BacklogAction = external_exports.enum(["set"]);
+var HookEvent = external_exports.enum(["pre-tool-use", "post-tool-use", "subagent-start", "subagent-stop"]);
+
+// src/util/regex.ts
+var grouped = (part) => `(?:${part.source})`;
+function anyOf(...parts) {
+  return new RegExp(parts.map(grouped).join("|"));
+}
+function inOrder(...parts) {
+  return new RegExp(parts.map(grouped).join(""));
+}
+function words(...parts) {
+  return new RegExp(parts.map(escapeRegExp).join(" "));
+}
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function wholeText(...parts) {
+  return new RegExp(`^${inOrder(...parts).source}$`);
+}
+
 // src/hooks/identity.ts
+var IdentityKind = external_exports.enum(["mainSession", "taskRole", "productOwner", "otherAgent"]);
 var AW_ROLE_AGENT = /(?:^|:)aw:(tester|reviewer|coder)$/;
 var AW_PRODUCT_OWNER_AGENT = /(?:^|:)aw:product-owner$/;
 function identify(agentType) {
-  if (typeof agentType !== "string" || agentType === "") return { kind: "main" };
+  if (typeof agentType !== "string" || agentType === "") return { kind: IdentityKind.enum.mainSession };
   const role = AW_ROLE_AGENT.exec(agentType);
-  if (role) return { kind: "role", role: role[1] };
-  if (AW_PRODUCT_OWNER_AGENT.test(agentType)) return { kind: "product-owner" };
-  return { kind: "other", agentType };
+  if (role) return { kind: IdentityKind.enum.taskRole, role: role[1] };
+  if (AW_PRODUCT_OWNER_AGENT.test(agentType)) return { kind: IdentityKind.enum.productOwner };
+  return { kind: IdentityKind.enum.otherAgent, agentType };
 }
-function isAwAgent(identity) {
-  return identity.kind === "role" || identity.kind === "product-owner";
+function isTaskRole(who) {
+  return who.kind === IdentityKind.enum.taskRole;
+}
+function isProductOwner(who) {
+  return who.kind === IdentityKind.enum.productOwner;
+}
+function isOtherAgent(who) {
+  return who.kind === IdentityKind.enum.otherAgent;
+}
+function isAwAgent(who) {
+  return isTaskRole(who) || isProductOwner(who);
 }
 
 // src/hooks/shell.ts
@@ -22777,12 +22890,21 @@ var deny = (reason) => ({ permissionDecision: "deny", reason: `aw: ${reason}` })
 var ask = (reason) => ({ permissionDecision: "ask", reason: `aw: ${reason}` });
 var EDIT_TOOLS = /* @__PURE__ */ new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 var SHELL_TOOLS = /* @__PURE__ */ new Set(["Bash", "PowerShell"]);
-var HUMAN_GATES = {
-  approve: "approve the plan",
-  accept: "accept the finished work",
-  repair: "want to accept a manual edit of state.json"
-};
 var ALWAYS_ALLOWED = ["cd", "pwd"];
+var CLI_ONLY_FILE = /(^|\/)(state|refinement)\.(json|sha256)$/;
+var CLI_ONLY_FILES = "state.json, refinement.json and their .sha256 seals are written only by the aw CLI. Use aw commands.";
+var SM_HUMAN_GATES = /* @__PURE__ */ new Map([
+  [SmAction.enum.approve, "approve the plan"],
+  [SmAction.enum.accept, "accept the finished work"],
+  [SmAction.enum.repair, "want to accept a manual edit of state.json"]
+]);
+var REFINE_HUMAN_GATES = /* @__PURE__ */ new Map([[RefineAction.enum.approve, "approve the split into tasks"]]);
+var READ_ONLY_SM_ACTIONS = /* @__PURE__ */ new Set([SmAction.enum.next]);
+var READ_ONLY_REFINE_ACTIONS = /* @__PURE__ */ new Set([RefineAction.enum.next, RefineAction.enum.show]);
+var PRODUCT_OWNER_REFINE_ACTION = RefineAction.enum.submit;
+function humanGate(command, userConfirms) {
+  return ask(`human gate \u2014 "${command}" records YOUR decision. Confirm only if you ${userConfirms}.`);
+}
 var samePath = (a, b) => process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
 function loadTask(ctx) {
   try {
@@ -22801,7 +22923,7 @@ function preToolUse(ctx, input2) {
     const file2 = [ti.file_path, ti.notebook_path, ti.path].find((v) => typeof v === "string");
     return file2 ? checkEdit(ctx, who, file2, input2.cwd ?? ctx.root) : null;
   }
-  if (tool === "SubagentHandback" && who.kind === "role") return checkHandback(ctx, who.role, String(ti.message ?? ""));
+  if (tool === "SubagentHandback" && isTaskRole(who)) return checkHandback(ctx, who.role, String(ti.message ?? ""));
   return null;
 }
 function guardUninitialized(input2) {
@@ -22816,43 +22938,46 @@ function guardUninitialized(input2) {
   );
 }
 function agentName(who) {
-  return who.kind === "role" ? `the ${who.role}` : "the product owner";
+  return isTaskRole(who) ? `the ${who.role}` : "the product owner";
 }
-var READ_ONLY_REFINE_ACTIONS = /* @__PURE__ */ new Set(["next", "show"]);
-function checkRefine(who, action) {
-  if (who.kind === "role") return deny(`the ${who.role} may not run "aw refine \u2026"; refinements happen outside the task pipeline.`);
-  if (who.kind === "other" && !READ_ONLY_REFINE_ACTIONS.has(action ?? "")) {
-    return deny("only the main session runs `aw refine` commands; other agents may only read (`aw refine next`, `aw refine show`).");
-  }
-  if (action === "submit") {
-    return deny("`aw refine submit` is run by the aw:product-owner agent. Start one with `aw refine start-agent <id>`.");
-  }
-  if (action === "approve") {
-    return ask('human gate \u2014 "aw refine approve" records YOUR decision. Confirm only if you approve the split into tasks.');
-  }
-  return null;
-}
-function checkAw(who, inv) {
-  const { sub, action } = inv;
-  if (sub === "hook") return deny("`aw hook` is reserved for Claude Code hooks.");
-  if (sub === "refine") return checkRefine(who, action);
-  if (sub === "sm") {
-    if (who.kind === "role") return deny(`the ${who.role} may not run orchestrator commands (aw sm \u2026). Use \`aw ${who.role} \u2026\`.`);
-    if (who.kind === "other" && action !== "next") return deny("only the main session (scrum-master) runs `aw sm` commands.");
-    if (action && action in HUMAN_GATES) {
-      return ask(`human gate \u2014 "aw sm ${action}" records YOUR decision. Confirm only if you ${HUMAN_GATES[action]}.`);
-    }
-    return null;
-  }
-  if (Role.options.includes(sub)) {
-    if (who.kind === "role" && who.role !== sub) return deny(`you are the ${who.role}; "aw ${sub} \u2026" belongs to the ${sub}. Use \`aw ${who.role} \u2026\`.`);
-    if (who.kind !== "role") return deny(`"aw ${sub} ${action ?? ""}" may only be run by the aw:${sub} subagent. Spawn it instead (see \`aw sm next\`).`);
-    return null;
-  }
-  if (who.kind === "role" && (sub === "init" || sub === "backlog" && action === "set")) {
+function checkAw(who, invocation) {
+  const { sub, action } = invocation;
+  if (sub === AwCommand.enum.hook) return deny("`aw hook` is reserved for Claude Code hooks.");
+  if (sub === AwCommand.enum.refine) return checkRefine(who, action);
+  if (sub === AwCommand.enum.sm) return checkOrchestrator(who, action);
+  if (isRoleName(sub)) return checkRoleCommand(who, sub, action);
+  if (isTaskRole(who) && changesAwSetup(sub, action)) {
     return deny(`the ${who.role} may not run "aw ${sub}${action ? ` ${action}` : ""}".`);
   }
   return null;
+}
+function isRoleName(word) {
+  return Role.safeParse(word).success;
+}
+function changesAwSetup(sub, action) {
+  return sub === AwCommand.enum.init || sub === AwCommand.enum.backlog && action === BacklogAction.enum.set;
+}
+function checkOrchestrator(who, action) {
+  if (isTaskRole(who)) return deny(`the ${who.role} may not run orchestrator commands (aw sm \u2026). Use \`aw ${who.role} \u2026\`.`);
+  if (isOtherAgent(who) && !READ_ONLY_SM_ACTIONS.has(action ?? "")) return deny("only the main session (scrum-master) runs `aw sm` commands.");
+  const userConfirms = SM_HUMAN_GATES.get(action ?? "");
+  return userConfirms ? humanGate(`aw sm ${action}`, userConfirms) : null;
+}
+function checkRoleCommand(who, role, action) {
+  if (!isTaskRole(who)) return deny(`"aw ${role} ${action ?? ""}" may only be run by the aw:${role} subagent. Spawn it instead (see \`aw sm next\`).`);
+  if (who.role !== role) return deny(`you are the ${who.role}; "aw ${role} \u2026" belongs to the ${role}. Use \`aw ${who.role} \u2026\`.`);
+  return null;
+}
+function checkRefine(who, action) {
+  if (isTaskRole(who)) return deny(`the ${who.role} may not run "aw refine \u2026"; refinements happen outside the task pipeline.`);
+  if (isOtherAgent(who) && !READ_ONLY_REFINE_ACTIONS.has(action ?? "")) {
+    return deny("only the main session runs `aw refine` commands; other agents may only read (`aw refine next`, `aw refine show`).");
+  }
+  if (action === PRODUCT_OWNER_REFINE_ACTION) {
+    return deny("`aw refine submit` is run by the aw:product-owner agent. Start one with `aw refine start-agent <id>`.");
+  }
+  const userConfirms = REFINE_HUMAN_GATES.get(action ?? "");
+  return userConfirms ? humanGate(`aw refine ${action}`, userConfirms) : null;
 }
 var firstWords = (command, count = 3) => command.split(/\s+/).slice(0, count).join(" ");
 function findTestRunnerCall(config2, segments) {
@@ -22861,9 +22986,19 @@ function findTestRunnerCall(config2, segments) {
   return segments.find(startsTestRunner);
 }
 var useAwTestInstead = (call) => `run tests through \`aw test\`, not "${firstWords(call)}". \`aw test\` runs this task's test files; narrow it with -t "<test name>" or pass files. Don't run the whole suite \u2014 submit runs it once as a gate.`;
-var PRODUCT_OWNER_COMMAND = /^(?:(?:\S*[\\/])?aw(?:\.cmd)?|node (?:"[^"]*aw\.mjs"|'[^']*aw\.mjs'|\S*aw\.mjs)) (?:refine submit|schema refine)(?: 2>&1)?$/;
+var AW_ON_PATH = /(?:\S*[\\/])?aw(?:\.cmd)?/;
+var PATH_TO_AW_BUNDLE = anyOf(/"[^"]*aw\.mjs"/, /'[^']*aw\.mjs'/, /\S*aw\.mjs/);
+var AW_LAUNCHER = anyOf(AW_ON_PATH, inOrder(/node /, PATH_TO_AW_BUNDLE));
+var REFINE_SCHEMA = "refine";
+var PRODUCT_OWNER_SUBCOMMAND = anyOf(
+  words(AwCommand.enum.refine, RefineAction.enum.submit),
+  words(AwCommand.enum.schema, REFINE_SCHEMA)
+);
+var OPTIONAL_ERRORS_TO_OUTPUT = /(?: 2>&1)?/;
+var PRODUCT_OWNER_COMMAND = wholeText(AW_LAUNCHER, / /, PRODUCT_OWNER_SUBCOMMAND, OPTIONAL_ERRORS_TO_OUTPUT);
+var withSingleSpaces = (segment) => segment.replace(/\s+/g, " ").trim();
 function checkProductOwnerShell(command) {
-  const isAllowed = (segment) => PRODUCT_OWNER_COMMAND.test(segment.replace(/\s+/g, " ").trim());
+  const isAllowed = (segment) => PRODUCT_OWNER_COMMAND.test(withSingleSpaces(segment));
   const blocked = splitSegments(command).find((segment) => !isAllowed(segment));
   if (blocked === void 0) return null;
   return deny(
@@ -22871,13 +23006,13 @@ function checkProductOwnerShell(command) {
   );
 }
 function checkShell(ctx, who, command) {
-  if (who.kind === "product-owner") return checkProductOwnerShell(command);
+  if (isProductOwner(who)) return checkProductOwnerShell(command);
   for (const invocation of findAwInvocations(command)) {
     const decision = checkAw(who, invocation);
     if (decision) return decision;
   }
-  if (writesStateFile(command)) return deny("state.json, refinement.json and their .sha256 seals are written only by the aw CLI. Use aw commands.");
-  if (who.kind !== "role") return null;
+  if (writesStateFile(command)) return deny(CLI_ONLY_FILES);
+  if (!isTaskRole(who)) return null;
   const segments = splitSegments(command).filter((segment) => findAwInvocations(segment).length === 0);
   if (directTestCommandsBlocked(ctx.config)) {
     const testRunnerCall = findTestRunnerCall(ctx.config, segments);
@@ -22901,12 +23036,10 @@ function checkEdit(ctx, who, file2, cwd) {
   const relPath = relativeToRoot(ctx.root, file2, cwd);
   const tasksRel = relativeToRoot(ctx.root, ctx.tasksDir) ?? "";
   const inTasks = relPath !== null && tasksRel !== "" && (relPath + "/").toLowerCase().startsWith(`${tasksRel}/`.toLowerCase());
-  if (relPath && /(^|\/)(state|refinement)\.(json|sha256)$/.test(relPath) && inTasks) {
-    return deny("state.json, refinement.json and their .sha256 seals are written only by the aw CLI. Use aw commands.");
-  }
-  if (who.kind === "product-owner") return checkProductOwnerEdit(ctx, relPath);
+  if (relPath && CLI_ONLY_FILE.test(relPath) && inTasks) return deny(CLI_ONLY_FILES);
+  if (isProductOwner(who)) return checkProductOwnerEdit(ctx, relPath);
   const { task, error: error62 } = loadTask(ctx);
-  if (who.kind !== "role") {
+  if (!isTaskRole(who)) {
     if (task && ctx.config.guards.blockMainSessionEditsDuringRuns && WORKING_STATUSES.includes(task.s.status) && !inTasks) {
       return deny(
         `an aw agent run is in progress (task ${task.s.id}, status ${task.s.status}). Don't edit project files meanwhile \u2014 wait for the agent, or \`aw sm reset\` first.`
@@ -22926,8 +23059,8 @@ function checkEdit(ctx, who, file2, cwd) {
   if (!relPath) return deny(`${file2} is outside the project.`);
   if (samePath(relPath, run2.outputFile)) return null;
   if (inTasks) return deny(`inside ${tasksRel}/ the ${role} may only write its output file ${run2.outputFile}.`);
-  if (role === "reviewer") return deny(`the reviewer is read-only. Write only your output JSON: ${run2.outputFile}.`);
-  if (role === "tester") {
+  if (role === Role.enum.reviewer) return deny(`the reviewer is read-only. Write only your output JSON: ${run2.outputFile}.`);
+  if (role === Role.enum.tester) {
     const isTest = globMatcher(ctx.config.tests.globs);
     if (!isTest(relPath)) {
       return deny(`the tester may only write test files (tests.globs: ${ctx.config.tests.globs.join(", ")}). ${relPath} is not one \u2014 production code belongs to the coder.`);
@@ -22957,7 +23090,9 @@ function checkHandback(ctx, role, message) {
   const { task } = loadTask(ctx);
   if (!task) return null;
   const run2 = latestRun(task.s, role);
-  if (run2?.state === "active") return deny(`finish the aw protocol before handing back: \`aw ${role} submit\` or \`aw ${role} fail --reason "<why>"\`.`);
+  if (run2?.state === RunState.enum.active) {
+    return deny(`finish the aw protocol before handing back: \`aw ${role} submit\` or \`aw ${role} fail --reason "<why>"\`.`);
+  }
   const max = ctx.config.limits.finalMessageMaxChars;
   if (message.length > max) {
     return deny(`hand back ONE line (max ${max} chars), e.g. "${role} ${run2?.id ?? "R-?"}: submitted \u2014 <\u226415 words>". Details are already in the state file.`);
@@ -22976,10 +23111,15 @@ function resumeMessage(s, role) {
 function recoverMessage(run2) {
   return `You stopped without finishing the aw protocol for run ${run2.id}. Run \`aw ${run2.role} submit\` (fix any errors it reports) or \`aw ${run2.role} fail --reason "<why>"\`. Then reply with one line.`;
 }
+function shouldResume(policy, s, role) {
+  if (policy === ResumePolicy.enum.always) return true;
+  if (policy === ResumePolicy.enum["on-dispute"]) return pendingNotes(s, role).some((note) => note.source === NoteSource.enum.dispute);
+  return false;
+}
 function spawn(ctx, s, role) {
-  const policy = ctx.config.agents[role].resume;
   const agentId = latestRun(s, role)?.agentId ?? s.lastSpawn[role]?.agentId;
-  const resume = !!agentId && (policy === "always" || policy === "on-dispute" && pendingNotes(s, role).some((n) => n.source === "dispute"));
+  const policy = ctx.config.agents[role].resume;
+  const resume = !!agentId && shouldResume(policy, s, role);
   return {
     kind: "spawn-agent",
     lines: [
@@ -23017,7 +23157,7 @@ function nextAction(ctx, s) {
     };
   }
   switch (s.status) {
-    case "PLANNING":
+    case Status.enum.PLANNING:
       return {
         kind: "plan",
         lines: [
@@ -23025,7 +23165,7 @@ function nextAction(ctx, s) {
           "2. Research the code and docs, draft the plan JSON (`aw schema plan`), then `aw sm plan --file <plan.json>`."
         ]
       };
-    case "AWAITING_APPROVAL":
+    case Status.enum.AWAITING_APPROVAL:
       return {
         kind: "user-approval",
         lines: [
@@ -23033,7 +23173,7 @@ function nextAction(ctx, s) {
           "Approved \u2192 `aw sm approve` (the user confirms the command). Changes \u2192 revise the JSON and `aw sm plan --file` again."
         ]
       };
-    case "DOCS_CHECK":
+    case Status.enum.DOCS_CHECK:
       return {
         kind: "docs-check",
         lines: [
@@ -23042,7 +23182,7 @@ function nextAction(ctx, s) {
           ...ctx.config.docs.map((d) => `- ${d.path} \u2014 ${d.when}`)
         ]
       };
-    case "AWAITING_ACCEPTANCE":
+    case Status.enum.AWAITING_ACCEPTANCE:
       return {
         kind: "user-acceptance",
         lines: [
@@ -23051,7 +23191,7 @@ function nextAction(ctx, s) {
           'Changes wanted \u2192 one note per remark: `aw sm note --for coder|tester --text "<remark>"`, then `aw sm reopen --to READY_FOR_CODING|READY_FOR_TESTS|PLANNING --note "<one-line summary>"`.'
         ]
       };
-    case "BLOCKED":
+    case Status.enum.BLOCKED:
       return {
         kind: "resolve-block",
         lines: [
@@ -23060,8 +23200,8 @@ function nextAction(ctx, s) {
           '`aw sm unblock --to <STATUS> --note "<decision>"` (the note goes to the agent that works next), or `aw sm cancel --reason "<why>"`.'
         ]
       };
-    case "DONE":
-    case "CANCELLED":
+    case Status.enum.DONE:
+    case Status.enum.CANCELLED:
       return {
         kind: "archive",
         lines: ["Write a short retro JSON (`aw schema retro`), then `aw sm archive --retro <retro.json>`."]
@@ -23097,7 +23237,7 @@ function requireStatus(s, allowed, action) {
   }
 }
 function activeRefinementRun(s) {
-  return s.runs.find((run2) => run2.state === "active");
+  return s.runs.find((run2) => run2.state === RefinementRunState.enum.active);
 }
 function pendingRefinementNotes(s) {
   return s.notes.filter((note) => !note.consumedByRun);
@@ -23108,7 +23248,7 @@ function latestRevision(s) {
 function abandonActiveRun(s, reason) {
   const run2 = activeRefinementRun(s);
   if (!run2) return;
-  run2.state = "abandoned";
+  run2.state = RefinementRunState.enum.abandoned;
   run2.finishedAt = nowIso();
   run2.abandonReason = reason;
   for (const note of s.notes) if (note.consumedByRun === run2.id) delete note.consumedByRun;
@@ -23152,7 +23292,7 @@ function productOwnerStart(ctx, input2) {
     const active = activeRefinementRun(s);
     if (active && input2.agent_id && !active.agentId) {
       active.agentId = input2.agent_id;
-      addRefinementEvent(s, "hook", "agent_spawned", input2.agent_id);
+      addRefinementEvent(s, RefinementActor.enum.hook, RefinementEventName.enum.agent_spawned, input2.agent_id);
     }
     return active;
   });
@@ -23169,81 +23309,83 @@ function productOwnerStop(ctx, input2) {
     if (input2.agent_transcript_path) run2.transcriptPath = input2.agent_transcript_path;
     if (run2.stopBlocks < ctx.config.limits.stopBlocks) {
       run2.stopBlocks += 1;
-      addRefinementEvent(s, "hook", "stop_blocked", run2.id);
+      addRefinementEvent(s, RefinementActor.enum.hook, RefinementEventName.enum.stop_blocked, run2.id);
       return {
         decision: "block",
         reason: `You haven't submitted a proposal yet. Write it to ${proposal} and run \`aw refine submit\`; if it reports errors, fix the file and run it again. Then reply in one line.`
       };
     }
     run2.stoppedWithoutSubmit = true;
-    addRefinementEvent(s, "hook", "agent_stopped_without_submit", run2.id);
+    addRefinementEvent(s, RefinementActor.enum.hook, RefinementEventName.enum.agent_stopped_without_submit, run2.id);
     return null;
   });
 }
 function subagentStart(ctx, input2) {
   const who = identify(input2.agent_type);
-  if (who.kind === "product-owner") return productOwnerStart(ctx, input2);
-  if (who.kind !== "role") return null;
+  if (isProductOwner(who)) return productOwnerStart(ctx, input2);
+  if (!isTaskRole(who)) return null;
   const ref = findActiveTask(ctx);
   if (!ref) return `aw: there is no active task \u2014 \`aw ${who.role} start\` will fail. Report that in one line and stop.`;
   if (input2.agent_id) {
     mutate(ref, (s) => {
       s.lastSpawn[who.role] = { agentId: input2.agent_id, at: nowIso() };
-      addEvent(s, "hook", "agent_spawned", `aw:${who.role} ${input2.agent_id}`);
+      addEvent(s, Actor.enum.hook, TaskEventName.enum.agent_spawned, `aw:${who.role} ${input2.agent_id}`);
     });
   }
   return `aw: you are aw:${who.role} for task ${ref.id}. Your first action must be \`aw ${who.role} start\`.`;
 }
 function subagentStop(ctx, input2) {
   const who = identify(input2.agent_type);
-  if (who.kind === "product-owner") return productOwnerStop(ctx, input2);
-  if (who.kind !== "role") return null;
+  if (isProductOwner(who)) return productOwnerStop(ctx, input2);
+  if (!isTaskRole(who)) return null;
   const ref = findActiveTask(ctx);
   if (!ref) return null;
   const agentId = input2.agent_id;
   const limits = ctx.config.limits;
   return mutate(ref, (s) => {
     const runs = runsOf(s, who.role);
-    const run2 = agentId && [...runs].reverse().find((r) => r.agentId === agentId) || runs.find((r) => r.state === "active");
+    const run2 = agentId && [...runs].reverse().find((r) => r.agentId === agentId) || runs.find((r) => r.state === RunState.enum.active);
     if (!run2 || run2.agentId && agentId && run2.agentId !== agentId) return null;
     if (agentId && !run2.agentId) run2.agentId = agentId;
     if (input2.agent_transcript_path) run2.transcriptPath = input2.agent_transcript_path;
-    if (run2.state === "active") {
+    if (run2.state === RunState.enum.active) {
       if (run2.stopBlocks < limits.stopBlocks) {
         run2.stopBlocks += 1;
-        addEvent(s, "hook", "stop_blocked", "agent tried to stop before submitting", run2.id);
+        addEvent(s, Actor.enum.hook, TaskEventName.enum.stop_blocked, "agent tried to stop before submitting", run2.id);
         return { decision: "block", reason: recoverMessage(run2) };
       }
       run2.stoppedWithoutSubmit = true;
-      addEvent(s, "hook", "agent_stopped_without_submit", void 0, run2.id);
+      addEvent(s, Actor.enum.hook, TaskEventName.enum.agent_stopped_without_submit, void 0, run2.id);
       return null;
     }
     const message = input2.last_assistant_message ?? "";
     if (message.length > limits.finalMessageMaxChars && run2.finalMessageBlocks < 1 && !input2.stop_hook_active) {
       run2.finalMessageBlocks += 1;
-      addEvent(s, "hook", "final_message_too_long", `${message.length} chars`, run2.id);
+      addEvent(s, Actor.enum.hook, TaskEventName.enum.final_message_too_long, `${message.length} chars`, run2.id);
       return {
         decision: "block",
         reason: `Your final reply is ${message.length} characters; the limit is ${limits.finalMessageMaxChars}. Reply again with exactly ONE line, e.g. "${run2.role} ${run2.id}: ${run2.state} \u2014 <\u226415 words>". Everything else is already in the state file.`
       };
     }
-    addEvent(s, "hook", "agent_stopped", void 0, run2.id);
+    addEvent(s, Actor.enum.hook, TaskEventName.enum.agent_stopped, void 0, run2.id);
     return null;
   });
+}
+function spawnsSubagent(tool) {
+  return tool === "Agent" || tool === "Task";
 }
 function afterAgentCall(ctx, input2) {
   const tool = input2.tool_name ?? "";
   const ti = input2.tool_input ?? {};
-  const spawnsAgent = tool === "Agent" || tool === "Task";
   const calledAgent = identify(String(ti.subagent_type ?? ""));
-  if (spawnsAgent && calledAgent.kind === "product-owner") {
+  if (spawnsSubagent(tool) && isProductOwner(calledAgent)) {
     return "aw: run `aw refine next` \u2014 don't rely on the product owner's reply; the refinement state is the source of truth.";
   }
   const ref = findActiveTask(ctx);
   if (!ref) return null;
   const s = readState(ref);
   let relevant = false;
-  if (spawnsAgent) relevant = calledAgent.kind === "role";
+  if (spawnsSubagent(tool)) relevant = isTaskRole(calledAgent);
   if (tool === "SendMessage") relevant = s.runs.some((r) => r.agentId && r.agentId === ti.to);
   if (!relevant) return null;
   return `aw: task ${s.id} is now ${s.status}. Don't rely on the agent's reply \u2014 run \`aw sm next\`.`;
@@ -23252,14 +23394,19 @@ function afterAgentCall(ctx, input2) {
 // src/commands/hook.ts
 var emit = (io, payload) => io.out(JSON.stringify(payload));
 function hookCommand(argv, io) {
-  const event = argv[0] ?? "";
+  const parsedEvent = HookEvent.safeParse(argv[0]);
+  if (!parsedEvent.success) {
+    io.err(`aw hook: unknown event "${argv[0] ?? ""}"`);
+    return EXIT.OK;
+  }
+  const event = parsedEvent.data;
   let input2;
   try {
     input2 = JSON.parse(io.readStdin() || "{}");
   } catch {
     return EXIT.OK;
   }
-  const guardedAgent = event === "pre-tool-use" && isAwAgent(identify(input2.agent_type));
+  const guardedAgent = event === HookEvent.enum["pre-tool-use"] && isAwAgent(identify(input2.agent_type));
   const failClosed = (message) => {
     if (guardedAgent) {
       emit(io, {
@@ -23271,13 +23418,13 @@ function hookCommand(argv, io) {
   try {
     const ctx = tryLoadCtx(input2.cwd || io.cwd);
     if (!ctx) {
-      const d = event === "pre-tool-use" ? guardUninitialized(input2) : null;
+      const d = event === HookEvent.enum["pre-tool-use"] ? guardUninitialized(input2) : null;
       if (d) {
         emit(io, {
           hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: d.permissionDecision, permissionDecisionReason: d.reason }
         });
       }
-      if (event === "subagent-start" && isAwAgent(identify(input2.agent_type))) {
+      if (event === HookEvent.enum["subagent-start"] && isAwAgent(identify(input2.agent_type))) {
         emit(io, {
           hookSpecificOutput: {
             hookEventName: "SubagentStart",
@@ -23288,7 +23435,7 @@ function hookCommand(argv, io) {
       return EXIT.OK;
     }
     switch (event) {
-      case "pre-tool-use": {
+      case HookEvent.enum["pre-tool-use"]: {
         const d = preToolUse(ctx, input2);
         if (d) {
           emit(io, {
@@ -23297,24 +23444,21 @@ function hookCommand(argv, io) {
         }
         return EXIT.OK;
       }
-      case "post-tool-use": {
+      case HookEvent.enum["post-tool-use"]: {
         const context = afterAgentCall(ctx, input2);
         if (context) emit(io, { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } });
         return EXIT.OK;
       }
-      case "subagent-start": {
+      case HookEvent.enum["subagent-start"]: {
         const context = subagentStart(ctx, input2);
         if (context) emit(io, { hookSpecificOutput: { hookEventName: "SubagentStart", additionalContext: context } });
         return EXIT.OK;
       }
-      case "subagent-stop": {
+      case HookEvent.enum["subagent-stop"]: {
         const d = subagentStop(ctx, input2);
         if (d) emit(io, d);
         return EXIT.OK;
       }
-      default:
-        io.err(`aw hook: unknown event "${event}"`);
-        return EXIT.OK;
     }
   } catch (e) {
     return failClosed(e.message);
@@ -23394,7 +23538,7 @@ function buildBriefing(ctx, ref, s, run2) {
   const plan = currentPlan(s);
   const out = [];
   const h = (title) => out.push("", `## ${title}`);
-  const roleLabel = run2.role === "reviewer" ? `reviewer (${run2.target} review)` : run2.role;
+  const roleLabel = run2.role === Role.enum.reviewer ? `reviewer (${run2.target} review)` : run2.role;
   out.push(
     `# aw briefing \xB7 ${roleLabel} \xB7 task ${s.id} \xB7 run ${run2.id} (iteration ${run2.iteration})`,
     "",
@@ -23414,9 +23558,9 @@ function buildBriefing(ctx, ref, s, run2) {
   }
   h("Acceptance criteria");
   for (const ac of plan?.acceptanceCriteria ?? []) out.push(`- ${ac.id}: ${ac.text}`);
-  if (run2.role === "tester") testerSection(ctx, s, run2, h, out);
-  if (run2.role === "coder") coderSection(ctx, ref, s, run2, h, out);
-  if (run2.role === "reviewer") reviewerSection(ctx, s, run2, h, out);
+  if (run2.role === Role.enum.tester) testerSection(ctx, s, run2, h, out);
+  if (run2.role === Role.enum.coder) coderSection(ctx, ref, s, run2, h, out);
+  if (run2.role === Role.enum.reviewer) reviewerSection(ctx, s, run2, h, out);
   mustAddress(s, run2, h, out);
   codeStandardsSection(ctx, h, out);
   const notes = readRoleNotes(ctx, run2.role);
@@ -23425,7 +23569,7 @@ function buildBriefing(ctx, ref, s, run2) {
     out.push(notes);
   }
   h("Your output");
-  const gates = run2.role === "tester" ? ctx.config.gates.afterTests : run2.role === "coder" ? ctx.config.gates.afterCoding : [];
+  const gates = gatesAfterSubmit(ctx, run2.role);
   out.push(
     `1. Write your result as JSON to: ${run2.outputFile}`,
     `   Format: run \`${awCmd(`schema ${run2.role}`)}\` (JSON Schema + example). Do not invent IDs \u2014 reference only IDs shown in this briefing.`,
@@ -23436,7 +23580,7 @@ function buildBriefing(ctx, ref, s, run2) {
   return out.join("\n");
 }
 function planReadingHint(role) {
-  if (role === "reviewer") return "the acceptance criteria are below; read the contract, out-of-scope items and risks there.";
+  if (role === Role.enum.reviewer) return "the acceptance criteria are below; read the contract, out-of-scope items and risks there.";
   return "the acceptance criteria and the parts of the plan you need are below; open it only for the summary, out-of-scope items and risks.";
 }
 function testerSection(ctx, s, run2, h, out) {
@@ -23455,7 +23599,7 @@ function testerSection(ctx, s, run2, h, out) {
     "You write tests only \u2014 never the feature under test, anywhere (not in a scratch copy either). The coder builds it; your tests are the contract it must satisfy.",
     `You may only create or edit files matching tests.globs: ${ctx.config.tests.globs.join(", ")}. Other writes are blocked.`,
     "Map every test to the criteria it verifies (`covers`) and mark edge cases. Every criterion must be covered or listed in `untestedCriteria` with a reason.",
-    testsHowTo(ctx, "tester")
+    testsHowTo(ctx, Role.enum.tester)
   );
   const prev = latestSubmittedTester(s);
   if (run2.iteration > 1 && prev?.output) {
@@ -23472,7 +23616,7 @@ function coderSection(ctx, ref, s, run2, h, out) {
   h("Implementation steps from the plan");
   for (const step of plan?.approach ?? []) out.push(`- ${step}`);
   h("Your job");
-  if (s.mode === "tdd") {
+  if (s.mode === Mode.enum.tdd) {
     out.push("Implement the plan so that the protected tests pass. Do not change the protected test files \u2014 edits are blocked and checked at submit.");
     const tests = protectedTests(s);
     if (tests.length) {
@@ -23497,16 +23641,16 @@ function coderSection(ctx, ref, s, run2, h, out) {
     out.push("", "Documentation index \u2014 update what your change affects and list it in `docsUpdated`:");
     for (const d of ctx.config.docs) out.push(`- ${d.path} \u2014 ${d.when}`);
   }
-  out.push("", testsHowTo(ctx, "coder"));
+  out.push("", testsHowTo(ctx, Role.enum.coder));
   out.push("", "Do not commit, push, stash or switch branches. The user reviews and commits.");
   if (run2.iteration > 1) {
-    const prev = submittedRuns(s, "coder").at(-1);
+    const prev = submittedRuns(s, Role.enum.coder).at(-1);
     if (prev) out.push(`This is iteration ${run2.iteration}; your previous submission was ${prev.id}.`);
   }
 }
 function reviewerSection(ctx, s, run2, h, out) {
   h("Your job");
-  if (run2.target === "tests") {
+  if (run2.target === ReviewTarget.enum.tests) {
     const tester = latestSubmittedTester(s);
     out.push(
       "Review the TESTS written from the requirements. No implementation exists yet \u2014 that's expected.",
@@ -23526,7 +23670,7 @@ function reviewerSection(ctx, s, run2, h, out) {
       notesToVerify(s, tester, h, out);
     }
   } else {
-    const coder = submittedRuns(s, "coder").at(-1);
+    const coder = submittedRuns(s, Role.enum.coder).at(-1);
     out.push(
       "Review the IMPLEMENTATION against the requirements, the plan and the tests.",
       s.git.baseRef ? `See the change with \`git diff ${s.git.baseRef}\` plus \`git status --porcelain\` (untracked files are new).` : "The repository has no git base commit recorded; use the coder's filesChanged list below."
@@ -23534,7 +23678,7 @@ function reviewerSection(ctx, s, run2, h, out) {
     if (s.git.dirtyAtStart) {
       out.push("Note: the working tree already had uncommitted changes when the task started \u2014 separate them using the coder's filesChanged list.");
     }
-    if (coder?.role === "coder" && coder.output) {
+    if (coder?.role === Role.enum.coder && coder.output) {
       h(`Coder's report (run ${coder.id})`);
       out.push(coder.output.summary);
       for (const f of coder.output.filesChanged) out.push(`- ${f.change}: ${f.path} \u2014 ${f.why}`);
@@ -23548,7 +23692,7 @@ function reviewerSection(ctx, s, run2, h, out) {
       notesToVerify(s, coder, h, out);
     }
   }
-  out.push("", testsHowTo(ctx, "reviewer"));
+  out.push("", testsHowTo(ctx, Role.enum.reviewer));
   h("Severity rules");
   out.push(
     "- blocker: wrong behavior vs requirements, data loss, security hole, crash, broken build/tests.",
@@ -23579,10 +23723,20 @@ function notesToVerify(s, reviewed, h, out) {
   }
 }
 var LINE_HINT = "Line numbers are hints from the time of the review \u2014 the code may have changed since. Locate by file + symbol (in parentheses) and the message.";
+function gatesAfterSubmit(ctx, role) {
+  if (role === Role.enum.tester) return ctx.config.gates.afterTests;
+  if (role === Role.enum.coder) return ctx.config.gates.afterCoding;
+  return [];
+}
+function findingsToFix(s, role) {
+  if (role === Role.enum.tester) return openBlockingFindings(s, ReviewTarget.enum.tests);
+  if (role === Role.enum.coder) return openBlockingFindings(s, ReviewTarget.enum.code);
+  return [];
+}
 function mustAddress(s, run2, h, out) {
-  const findings = run2.role === "tester" ? openBlockingFindings(s, "tests") : run2.role === "coder" ? openBlockingFindings(s, "code") : [];
+  const findings = findingsToFix(s, run2.role);
   const notes = s.notes.filter((n) => run2.consumedNotes.includes(n.id));
-  if (run2.role === "reviewer") {
+  if (run2.role === Role.enum.reviewer) {
     const open2 = openBlockingFindings(s, run2.target);
     if (open2.length) {
       h("Verify previous findings (give each a status in `previousFindings`)");
@@ -23837,8 +23991,8 @@ function showCommand(argv, io) {
   if (s.runs.length) {
     io.out("\nRuns:");
     for (const r of s.runs) {
-      const what = r.role === "reviewer" ? `reviewer/${r.target}` : r.role;
-      const verdict = r.role === "reviewer" && r.output ? ` \u2192 ${r.output.verdict}` : "";
+      const what = r.role === Role.enum.reviewer ? `reviewer/${r.target}` : r.role;
+      const verdict = r.role === Role.enum.reviewer && r.output ? ` \u2192 ${r.output.verdict}` : "";
       const rejects = r.submitAttempts.filter((a) => !a.ok).length;
       io.out(`  ${r.id} ${what} #${r.iteration} ${r.state}${verdict}${rejects ? ` (${rejects} rejected submit(s))` : ""}`);
       if (r.output) io.out(`      ${r.output.summary.split("\n")[0]}`);
@@ -23857,7 +24011,7 @@ Open blocking findings (${target}):`);
     if (notes.length) io.out(`
 Pending notes for ${role}: ${notes.map((n) => `${n.id} ${n.text}`).join(" | ")}`);
   }
-  const followUps = s.runs.flatMap((r) => r.role === "reviewer" && r.output ? r.output.followUps.map((f) => f.text) : []);
+  const followUps = s.runs.flatMap((r) => r.role === Role.enum.reviewer && r.output ? r.output.followUps.map((f) => f.text) : []);
   if (followUps.length) io.out(`
 Follow-ups:
 ${followUps.map((f) => `  - ${f}`).join("\n")}`);
@@ -23874,13 +24028,17 @@ ${formatNext(null, nextAction(ctx, s))}`);
   return EXIT.OK;
 }
 var SCHEMA_NAMES = [...Object.keys(INPUT_SCHEMAS), "config", "state"];
+function schemaByName(name) {
+  if (name === "config") return Config;
+  if (name === "state") return TaskState;
+  return INPUT_SCHEMAS[name];
+}
 function schemaCommand(argv, io) {
   const name = argv[0];
   if (!name || !SCHEMA_NAMES.includes(name)) {
     throw new AwError(`Usage: aw schema <${SCHEMA_NAMES.join("|")}>`, EXIT.USAGE);
   }
-  const schema = name === "config" ? Config : name === "state" ? TaskState : INPUT_SCHEMAS[name];
-  const json2 = external_exports.toJSONSchema(schema, { io: name === "state" ? "output" : "input", unrepresentable: "any" });
+  const json2 = external_exports.toJSONSchema(schemaByName(name), { io: name === "state" ? "output" : "input", unrepresentable: "any" });
   io.out(`JSON Schema for ${name}${name in INPUT_SCHEMAS ? " (fields with defaults may be omitted; unknown fields are rejected)" : ""}:`);
   io.out(JSON.stringify(json2, null, 2));
   const example = EXAMPLES[name];
@@ -23895,7 +24053,7 @@ function backlogCommand(argv, io) {
   const ctx = loadCtx(io.cwd);
   const args = parseArgs(argv, ["all", "json"]);
   const backlog = readBacklog(ctx);
-  if (args.positionals[0] === "set") {
+  if (args.positionals[0] === BacklogAction.enum.set) {
     const [, id, status] = args.positionals;
     const parsedStatus = BacklogItem.shape.status.safeParse(status);
     if (!id || !parsedStatus.success) {
@@ -23912,7 +24070,7 @@ function backlogCommand(argv, io) {
     return EXIT.OK;
   }
   const kind = str(args, "kind");
-  const items = backlog.items.filter((i) => (bool(args, "all") || i.status === "open") && (!kind || i.kind === kind));
+  const items = backlog.items.filter((i) => (bool(args, "all") || i.status === BacklogStatus.enum.open) && (!kind || i.kind === kind));
   if (bool(args, "json")) {
     io.out(JSON.stringify(items, null, 2));
     return EXIT.OK;
@@ -23942,7 +24100,7 @@ function statsCommand(_argv, io) {
     return EXIT.OK;
   }
   const avg = (xs) => xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : "\u2014";
-  const count = (s, role) => s.runs.filter((r) => r.role === role && r.state === "submitted").length;
+  const count = (s, role) => s.runs.filter((r) => r.role === role && r.state === RunState.enum.submitted).length;
   const tally = /* @__PURE__ */ new Map();
   const bump = (k) => tally.set(k, (tally.get(k) ?? 0) + 1);
   let rejected = 0;
@@ -23958,14 +24116,16 @@ function statsCommand(_argv, io) {
       t.runs += r.testRuns.length;
       t.ms += r.testRuns.reduce((sum, x) => sum + x.durationMs, 0);
       testTime.set(r.role, t);
-      if (r.role === "reviewer" && r.output) for (const f of r.output.findings) bump(`${f.severity} \xB7 ${f.category}`);
+      if (r.role === Role.enum.reviewer && r.output) for (const f of r.output.findings) bump(`${f.severity} \xB7 ${f.category}`);
       for (const n of r.output?.processNotes ?? []) notes.push(`${s.id} ${r.role}: ${n}`);
     }
-    for (const h of s.history) if (h.type === "transition" && h.to === "BLOCKED") blocks.push(`${s.id}: ${h.note ?? ""}`);
+    for (const h of s.history) if (h.type === "transition" && h.to === Status.enum.BLOCKED) blocks.push(`${s.id}: ${h.note ?? ""}`);
   }
-  const done = tasks.filter((t) => t.status === "DONE");
+  const done = tasks.filter((t) => t.status === Status.enum.DONE);
   io.out(`Archived tasks: ${tasks.length} (done ${done.length}, cancelled ${tasks.length - done.length})`);
-  io.out(`Avg iterations per task \u2014 tests: ${avg(tasks.map((t) => count(t, "tester")))}, code: ${avg(tasks.map((t) => count(t, "coder")))}`);
+  const testIterations = avg(tasks.map((t) => count(t, Role.enum.tester)));
+  const codeIterations = avg(tasks.map((t) => count(t, Role.enum.coder)));
+  io.out(`Avg iterations per task \u2014 tests: ${testIterations}, code: ${codeIterations}`);
   io.out(`Avg plan revisions: ${avg(tasks.map((t) => t.plans.length))}`);
   io.out(`Rejected submissions: ${rejected} \xB7 agents stopped before submitting: ${stopBlocks}`);
   const testLines = [...testTime.entries()].filter(([, t]) => t.runs).map(([role, t]) => `${role} ${t.runs} run(s), ${Math.round(t.ms / 1e3)}s`);
@@ -24421,7 +24581,7 @@ function chooseAction(inProgress) {
 function refinementNextAction(ctx, ref, s) {
   const paths = refinementPaths(ref);
   switch (s.status) {
-    case "DRAFT": {
+    case RefinementStatus.enum.DRAFT: {
       if (!writtenInput(readTextIfExists(paths.input))) {
         return {
           kind: "write-input",
@@ -24440,7 +24600,7 @@ function refinementNextAction(ctx, ref, s) {
         ]
       };
     }
-    case "WORKING": {
+    case RefinementStatus.enum.WORKING: {
       const run2 = activeRefinementRun(s);
       return {
         kind: "recover-agent",
@@ -24450,7 +24610,7 @@ function refinementNextAction(ctx, ref, s) {
         ]
       };
     }
-    case "PROPOSED": {
+    case RefinementStatus.enum.PROPOSED: {
       const revision = latestRevision(s);
       return {
         kind: "user-review",
@@ -24463,7 +24623,7 @@ function refinementNextAction(ctx, ref, s) {
         ]
       };
     }
-    case "APPROVED": {
+    case RefinementStatus.enum.APPROVED: {
       const revision = s.revisions.find((candidate) => candidate.revision === s.approvedRevision);
       return {
         kind: "done",
@@ -24473,7 +24633,7 @@ function refinementNextAction(ctx, ref, s) {
         ]
       };
     }
-    case "CANCELLED":
+    case RefinementStatus.enum.CANCELLED:
       return { kind: "cancelled", lines: ["The refinement was cancelled. Nothing to do."] };
   }
 }
@@ -24547,7 +24707,7 @@ function checkTester(ctx, s, run2, out) {
     seen.add(key);
   }
   if (!out.tests.some((t) => t.edgeCase)) warnings.push("tester marked no test as an edge case");
-  checkAddressed(s, "tests", run2, out, errors);
+  checkAddressed(s, ReviewTarget.enum.tests, run2, out, errors);
   return { errors, warnings };
 }
 function checkReviewer(ctx, s, run2, out) {
@@ -24574,11 +24734,11 @@ function checkReviewer(ctx, s, run2, out) {
     if (!open2.some((f) => f.id === id)) errors.push(`previousFindings: ${id} is not an open blocking finding`);
   }
   const newBlocking = out.findings.filter((f) => isBlocking(f.severity)).length;
-  const notFixed = out.previousFindings.filter((p) => p.status === "not_fixed").length;
-  if (out.verdict === "approve") {
+  const notFixed = out.previousFindings.filter((p) => p.status === PreviousFindingStatus.enum.not_fixed).length;
+  if (out.verdict === ReviewVerdict.enum.approve) {
     if (newBlocking) errors.push(`verdict "approve" with ${newBlocking} blocker/major finding(s) \u2014 request changes or lower their severity`);
     if (notFixed) errors.push(`verdict "approve" while ${notFixed} previous finding(s) are not_fixed`);
-    const missing = out.acCoverage.filter((c) => c.verdict === "missing").map((c) => c.ac);
+    const missing = out.acCoverage.filter((c) => c.verdict === CoverageVerdict.enum.missing).map((c) => c.ac);
     if (missing.length) errors.push(`verdict "approve" but acCoverage marks ${missing.join(", ")} as missing`);
   } else if (!newBlocking && !notFixed) {
     errors.push(
@@ -24593,7 +24753,7 @@ function checkCoder(ctx, s, run2, out) {
   out.filesChanged.forEach((f, i) => f.path = normalizePath(ctx, f.path, `filesChanged[${i}].path`, errors));
   out.testsAdded.forEach((t, i) => t.file = normalizePath(ctx, t.file, `testsAdded[${i}].file`, errors));
   out.docsUpdated.forEach((d, i) => d.path = normalizePath(ctx, d.path, `docsUpdated[${i}].path`, errors));
-  checkAddressed(s, "code", run2, out, errors);
+  checkAddressed(s, ReviewTarget.enum.code, run2, out, errors);
   const testIds = new Set(protectedTests(s).map((t) => t.id));
   for (const d of out.testDisputes) {
     if (!testIds.has(d.testId)) errors.push(`testDisputes: ${d.testId} is not one of the protected tests`);
@@ -24609,7 +24769,7 @@ function checkCoder(ctx, s, run2, out) {
     ...out.testsAdded.flatMap((t, i) => t.covers.map((ac) => ({ ac, where: `testsAdded[${i}].covers` }))),
     ...out.untestedCriteria.map((u, i) => ({ ac: u.ac, where: `untestedCriteria[${i}]` }))
   ], errors);
-  if (s.mode === "light") {
+  if (s.mode === Mode.enum.light) {
     checkCoverage(
       s,
       new Set(out.testsAdded.flatMap((t) => t.covers)),
@@ -24618,7 +24778,9 @@ function checkCoder(ctx, s, run2, out) {
     );
   }
   for (const f of out.filesChanged) {
-    if (f.change !== "deleted" && !exists(ctx, f.path)) warnings.push(`filesChanged lists ${f.path} as ${f.change}, but it does not exist`);
+    if (f.change !== FileChange.enum.deleted && !exists(ctx, f.path)) {
+      warnings.push(`filesChanged lists ${f.path} as ${f.change}, but it does not exist`);
+    }
   }
   for (const t of out.testsAdded) {
     if (!exists(ctx, t.file)) errors.push(`testsAdded: file not found: ${t.file}`);
@@ -24733,30 +24895,30 @@ var USAGE = `aw refine <command>
   reset <id>                       discard an unfinished product-owner run
   show [<id>] [--json]             list the refinements, or one refinement's items`;
 function refineCommand(argv, io) {
-  const [sub, ...rest] = argv;
+  const [word, ...rest] = argv;
+  const action = RefineAction.safeParse(word);
+  if (!action.success) throw new AwError(word ? `Unknown command: aw refine ${word}` : "Missing the refine command.", EXIT.USAGE, USAGE);
   const args = parseArgs(rest, ["json"]);
   const ctx = loadCtx(io.cwd);
-  switch (sub) {
-    case "new":
+  switch (action.data) {
+    case RefineAction.enum.new:
       return refineNew(ctx, args, io);
-    case "next":
+    case RefineAction.enum.next:
       return refineNext(ctx, args, io);
-    case "start-agent":
+    case RefineAction.enum["start-agent"]:
       return refineStartAgent(ctx, args, io);
-    case "submit":
+    case RefineAction.enum.submit:
       return refineSubmit(ctx, io);
-    case "note":
+    case RefineAction.enum.note:
       return refineNote(ctx, args, io);
-    case "approve":
+    case RefineAction.enum.approve:
       return refineApprove(ctx, args, io);
-    case "cancel":
+    case RefineAction.enum.cancel:
       return refineCancel(ctx, args, io);
-    case "reset":
+    case RefineAction.enum.reset:
       return refineReset(ctx, args, io);
-    case "show":
+    case RefineAction.enum.show:
       return refineShow(ctx, args, io);
-    default:
-      throw new AwError(sub ? `Unknown command: aw refine ${sub}` : "Missing the refine command.", EXIT.USAGE, USAGE);
   }
 }
 function printNext(ctx, ref, s, io) {
@@ -24785,8 +24947,8 @@ function refineNew(ctx, args, io) {
     schemaVersion: 1,
     id,
     title,
-    source: inputFile ? { kind: "file", ref: inputFile } : { kind: "manual" },
-    status: "DRAFT",
+    source: inputFile ? { kind: RefinementSourceKind.enum.file, ref: inputFile } : { kind: RefinementSourceKind.enum.manual },
+    status: RefinementStatus.enum.DRAFT,
     createdAt: now,
     updatedAt: now,
     runs: [],
@@ -24795,7 +24957,7 @@ function refineNew(ctx, args, io) {
     history: [],
     counters: { run: 0, note: 0 }
   };
-  addRefinementEvent(s, "scrum-master", "refinement_created", inputFile ? `input from ${inputFile}` : void 0);
+  addRefinementEvent(s, RefinementActor.enum["scrum-master"], RefinementEventName.enum.refinement_created, inputFile ? `input from ${inputFile}` : void 0);
   writeRefinement(ref, s);
   io.out(`Created refinement ${id} in ${rel(ctx, ref.dir)}`);
   io.out(`Input: ${rel(ctx, paths.input)}${inputFile ? " (copied)" : " \u2014 write the slice description there VERBATIM"}`);
@@ -24829,18 +24991,24 @@ function refineStartAgent(ctx, args, io) {
   }
   const paths = refinementPaths(ref);
   const { state, run: run2 } = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["DRAFT"], "start-agent");
+    requireStatus(s, [RefinementStatus.enum.DRAFT], RefineAction.enum["start-agent"]);
     if (!writtenInput(readTextIfExists(paths.input))) {
       throw new AwError(`${rel(ctx, paths.input)} is empty. Write the slice description there first.`, EXIT.VALIDATION);
     }
-    const run3 = { id: nextRefinementId(s, "run", "R"), state: "active", startedAt: nowIso(), consumedNotes: [], stopBlocks: 0 };
+    const run3 = {
+      id: nextRefinementId(s, "run", "R"),
+      state: RefinementRunState.enum.active,
+      startedAt: nowIso(),
+      consumedNotes: [],
+      stopBlocks: 0
+    };
     for (const note of pendingRefinementNotes(s)) {
       note.consumedByRun = run3.id;
       run3.consumedNotes.push(note.id);
     }
     s.runs.push(run3);
-    s.status = "WORKING";
-    addRefinementEvent(s, "scrum-master", "agent_started", run3.id);
+    s.status = RefinementStatus.enum.WORKING;
+    addRefinementEvent(s, RefinementActor.enum["scrum-master"], RefinementEventName.enum.agent_started, run3.id);
     return { state: s, run: run3 };
   });
   fs13.rmSync(paths.proposal, { force: true });
@@ -24873,7 +25041,7 @@ function refineSubmit(ctx, io) {
   }
   const output2 = parseInput(RefineOutput, readInputJson(io, paths.proposal), proposalFile, "refine");
   const { state, revision } = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["WORKING"], "submit");
+    requireStatus(s, [RefinementStatus.enum.WORKING], RefineAction.enum.submit);
     const run2 = activeRefinementRun(s);
     if (!run2) throw new AwError(`Refinement ${s.id} has no active run.`, EXIT.STATUS_MISMATCH);
     const errors = checkRefineOutput(ctx.config.refine, output2, run2.consumedNotes);
@@ -24887,10 +25055,11 @@ ${errors.map((error62) => `  - ${error62}`).join("\n")}`,
     }
     const revision2 = toRevision(s, run2, output2);
     s.revisions.push(revision2);
-    run2.state = "submitted";
+    run2.state = RefinementRunState.enum.submitted;
     run2.finishedAt = nowIso();
-    s.status = "PROPOSED";
-    addRefinementEvent(s, "product-owner", "proposal_submitted", `revision ${revision2.revision}, ${revision2.items.length} items`);
+    s.status = RefinementStatus.enum.PROPOSED;
+    const summary = `revision ${revision2.revision}, ${revision2.items.length} items`;
+    addRefinementEvent(s, RefinementActor.enum["product-owner"], RefinementEventName.enum.proposal_submitted, summary);
     return { state: s, revision: revision2 };
   });
   ensureDir(paths.revisions);
@@ -24906,11 +25075,11 @@ function refineNote(ctx, args, io) {
   const ref = requireRefinement(ctx, args.positionals[0], usage);
   const text = requireStr(args, "text", usage);
   const note = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["PROPOSED", "DRAFT"], "note");
+    requireStatus(s, [RefinementStatus.enum.PROPOSED, RefinementStatus.enum.DRAFT], RefineAction.enum.note);
     const note2 = { id: nextRefinementId(s, "note", "N"), text, at: nowIso() };
     s.notes.push(note2);
-    if (s.status === "PROPOSED") s.status = "DRAFT";
-    addRefinementEvent(s, "user", "note_added", note2.id);
+    if (s.status === RefinementStatus.enum.PROPOSED) s.status = RefinementStatus.enum.DRAFT;
+    addRefinementEvent(s, RefinementActor.enum.user, RefinementEventName.enum.note_added, note2.id);
     return note2;
   });
   io.out(`Note ${note.id} queued for the next product-owner run of ${ref.id}.`);
@@ -24920,12 +25089,12 @@ function refineApprove(ctx, args, io) {
   const ref = requireRefinement(ctx, args.positionals[0], "aw refine approve <id>");
   const paths = refinementPaths(ref);
   const { state, revision } = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["PROPOSED"], "approve");
+    requireStatus(s, [RefinementStatus.enum.PROPOSED], RefineAction.enum.approve);
     const revision2 = latestRevision(s);
     if (!revision2) throw new AwError(`Refinement ${s.id} has no proposal to approve.`, EXIT.STATUS_MISMATCH);
     s.approvedRevision = revision2.revision;
-    s.status = "APPROVED";
-    addRefinementEvent(s, "user", "approved", `revision ${revision2.revision}`);
+    s.status = RefinementStatus.enum.APPROVED;
+    addRefinementEvent(s, RefinementActor.enum.user, RefinementEventName.enum.approved, `revision ${revision2.revision}`);
     return { state: s, revision: revision2 };
   });
   ensureDir(paths.items);
@@ -24943,10 +25112,10 @@ function refineCancel(ctx, args, io) {
   const ref = requireRefinement(ctx, args.positionals[0], usage);
   const reason = requireStr(args, "reason", usage);
   mutateRefinement(ref, (s) => {
-    requireStatus(s, ["DRAFT", "WORKING", "PROPOSED"], "cancel");
+    requireStatus(s, [RefinementStatus.enum.DRAFT, RefinementStatus.enum.WORKING, RefinementStatus.enum.PROPOSED], RefineAction.enum.cancel);
     abandonActiveRun(s, `cancelled: ${reason}`);
-    s.status = "CANCELLED";
-    addRefinementEvent(s, "user", "cancelled", reason);
+    s.status = RefinementStatus.enum.CANCELLED;
+    addRefinementEvent(s, RefinementActor.enum.user, RefinementEventName.enum.cancelled, reason);
   });
   io.out(`Refinement ${ref.id} cancelled.`);
   return EXIT.OK;
@@ -24954,11 +25123,11 @@ function refineCancel(ctx, args, io) {
 function refineReset(ctx, args, io) {
   const ref = requireRefinement(ctx, args.positionals[0], "aw refine reset <id>");
   const runId = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["WORKING"], "reset");
+    requireStatus(s, [RefinementStatus.enum.WORKING], RefineAction.enum.reset);
     const run2 = activeRefinementRun(s);
     abandonActiveRun(s, "reset by the orchestrator");
-    s.status = "DRAFT";
-    addRefinementEvent(s, "scrum-master", "agent_reset", run2?.id);
+    s.status = RefinementStatus.enum.DRAFT;
+    addRefinementEvent(s, RefinementActor.enum["scrum-master"], RefinementEventName.enum.agent_reset, run2?.id);
     return run2?.id ?? "?";
   });
   io.out(`Run ${runId} discarded; refinement ${ref.id} is DRAFT again. Start a fresh agent with \`aw refine start-agent ${ref.id}\`.`);
@@ -25009,21 +25178,23 @@ function refineShow(ctx, args, io) {
 import * as fs14 from "node:fs";
 import * as path16 from "node:path";
 function roleCommand(role, argv, io) {
-  const [sub, ...rest] = argv;
+  const [word, ...rest] = argv;
+  const action = RoleAction.safeParse(word);
+  if (!action.success) {
+    throw new AwError(word ? `Unknown command: aw ${role} ${word}` : `Missing command.`, EXIT.USAGE, `Usage: aw ${role} start | submit | fail --reason "<why>"`);
+  }
   const ctx = loadCtx(io.cwd);
-  switch (sub) {
-    case "start":
+  switch (action.data) {
+    case RoleAction.enum.start:
       return start(ctx, role, io);
-    case "submit":
+    case RoleAction.enum.submit:
       return submit(ctx, role, io);
-    case "fail":
+    case RoleAction.enum.fail:
       return fail(ctx, role, requireStr(parseArgs(rest), "reason", `aw ${role} fail --reason "<why>"`), io);
-    default:
-      throw new AwError(sub ? `Unknown command: aw ${role} ${sub}` : `Missing command.`, EXIT.USAGE, `Usage: aw ${role} start | submit | fail --reason "<why>"`);
   }
 }
 function mismatch(role, status, action) {
-  const allowed = ROLE_STEPS[role].map((s) => action === "start" ? s.ready : s.working).join(" or ");
+  const allowed = ROLE_STEPS[role].map((s) => action === RoleAction.enum.start ? s.ready : s.working).join(" or ");
   return new AwError(
     `STATUS MISMATCH \u2014 the ${role} cannot ${action}: ${status ? `task status is ${status}` : "there is no active task"}; ${action} requires ${allowed}.
 Do NOT do any work. Reply to the orchestrator with this error in one line and stop.`,
@@ -25035,10 +25206,10 @@ function releaseNotes(s, runId) {
 }
 function start(ctx, role, io) {
   const ref = findActiveTask(ctx);
-  if (!ref) throw mismatch(role, null, "start");
+  if (!ref) throw mismatch(role, null, RoleAction.enum.start);
   const { s, run: run2 } = mutate(ref, (s2) => {
     const step = stepForReady(role, s2.status);
-    if (!step) throw mismatch(role, s2.status, "start");
+    if (!step) throw mismatch(role, s2.status, RoleAction.enum.start);
     const id = nextId(s2, "run", "R");
     const notes = pendingNotes(s2, role);
     for (const n of notes) n.consumedByRun = id;
@@ -25059,7 +25230,7 @@ function start(ctx, role, io) {
       stoppedWithoutSubmit: false,
       ...agentId ? { agentId } : {}
     };
-    const run3 = role === "reviewer" ? { role, target: step.target, ...base } : role === "tester" ? { role, ...base } : { role, ...base };
+    const run3 = role === Role.enum.reviewer ? { role, target: step.target, ...base } : role === Role.enum.tester ? { role, ...base } : { role, ...base };
     s2.runs.push(run3);
     transition(s2, step.working, role, `run ${id} started`);
     return { s: s2, run: run3 };
@@ -25072,7 +25243,7 @@ function precheck(ctx, ref, role) {
   return withLock(ref, () => {
     const s = readState(ref);
     const run2 = activeRun(s);
-    if (!run2 || run2.role !== role || !stepForWorking(role, s.status)) throw mismatch(role, s.status, "submit");
+    if (!run2 || run2.role !== role || !stepForWorking(role, s.status)) throw mismatch(role, s.status, RoleAction.enum.submit);
     const max = ctx.config.limits.maxSubmitAttempts;
     if (run2.submitAttempts.length >= max) {
       throw new AwError(`Submit attempt limit reached (${max}) for run ${run2.id}.`, EXIT.VALIDATION, `Run \`aw ${role} fail --reason "<why>"\` and stop.`);
@@ -25096,13 +25267,13 @@ function precheck(ctx, ref, role) {
     }
     let warnings = [];
     if (output2) {
-      const check2 = run2.role === "tester" ? checkTester(ctx, s, run2, output2) : run2.role === "coder" ? checkCoder(ctx, s, run2, output2) : checkReviewer(ctx, s, run2, output2);
+      const check2 = run2.role === Role.enum.tester ? checkTester(ctx, s, run2, output2) : run2.role === Role.enum.coder ? checkCoder(ctx, s, run2, output2) : checkReviewer(ctx, s, run2, output2);
       errors.push(...check2.errors);
       warnings = check2.warnings;
     }
     if (errors.length || !output2) {
       run2.submitAttempts.push({ at: nowIso(), ok: false, errors });
-      addEvent(s, role, "submit_rejected", `${errors.length} error(s)`, run2.id);
+      addEvent(s, role, TaskEventName.enum.submit_rejected, `${errors.length} error(s)`, run2.id);
       writeState(ref, s);
       return { ok: false, errors, attempt: run2.submitAttempts.length, max, outputFile: run2.outputFile };
     }
@@ -25111,13 +25282,13 @@ function precheck(ctx, ref, role) {
 }
 var unique = (xs) => [...new Set(xs)];
 function gatesFor(ctx, role, s, output2) {
-  if (role === "tester") {
+  if (role === Role.enum.tester) {
     const o = output2;
     return { gates: ctx.config.gates.afterTests, files: unique([...o.tests.map((t) => t.file)]) };
   }
-  if (role === "coder") {
+  if (role === Role.enum.coder) {
     const o = output2;
-    const files = s.mode === "tdd" ? protectedTests(s).map((t) => t.file) : [];
+    const files = s.mode === Mode.enum.tdd ? protectedTests(s).map((t) => t.file) : [];
     return { gates: ctx.config.gates.afterCoding, files: unique([...files, ...o.testsAdded.map((t) => t.file)]) };
   }
   return { gates: [], files: [] };
@@ -25135,48 +25306,53 @@ function snapshotProtected(ctx, ref, s) {
     fs14.copyFileSync(abs, snapshot);
     return { path: f, sha256: fileSha256(abs), snapshot: rel(ctx, snapshot) };
   });
-  addEvent(s, "reviewer", "tests_protected", `${files.length} file(s) snapshotted`);
+  addEvent(s, Actor.enum.reviewer, TaskEventName.enum.tests_protected, `${files.length} file(s) snapshotted`);
 }
 function complete(ctx, ref, s, run2, output2) {
   const limits = ctx.config.limits;
   const lines = [];
-  if (run2.role === "tester") {
+  if (run2.role === Role.enum.tester) {
     const o = output2;
     run2.output = { ...o, tests: o.tests.map((t) => ({ ...t, id: nextId(s, "test", "T") })) };
-    transition(s, "READY_FOR_TEST_REVIEW", "tester", `run ${run2.id} submitted`);
+    transition(s, Status.enum.READY_FOR_TEST_REVIEW, Actor.enum.tester, `run ${run2.id} submitted`);
     lines.push(`Tests registered: ${run2.output.tests.map((t) => t.id).join(", ")}`);
-  } else if (run2.role === "reviewer") {
+  } else if (run2.role === Role.enum.reviewer) {
     const o = output2;
     run2.output = { ...o, findings: o.findings.map((f) => ({ ...f, id: nextId(s, "finding", "F") })) };
-    const approved = o.verdict === "approve";
-    if (run2.target === "tests") {
-      const done = submittedRuns(s, "tester").length;
+    const approved = o.verdict === ReviewVerdict.enum.approve;
+    if (run2.target === ReviewTarget.enum.tests) {
+      const done = submittedRuns(s, Role.enum.tester).length;
       if (approved) {
         snapshotProtected(ctx, ref, s);
-        transition(s, "READY_FOR_CODING", "reviewer", "tests approved");
+        transition(s, Status.enum.READY_FOR_CODING, Actor.enum.reviewer, "tests approved");
       } else if (done >= limits.maxTestIterations) {
-        transition(s, "BLOCKED", "reviewer", `tests still need changes after ${done} tester iteration(s) (limit ${limits.maxTestIterations})`);
-      } else transition(s, "READY_FOR_TESTS", "reviewer", "changes requested on tests");
+        const reason = `tests still need changes after ${done} tester iteration(s) (limit ${limits.maxTestIterations})`;
+        transition(s, Status.enum.BLOCKED, Actor.enum.reviewer, reason);
+      } else transition(s, Status.enum.READY_FOR_TESTS, Actor.enum.reviewer, "changes requested on tests");
     } else {
-      const done = submittedRuns(s, "coder").length;
-      if (approved) transition(s, ctx.config.flow.docsCheck ? "DOCS_CHECK" : "AWAITING_ACCEPTANCE", "reviewer", "code approved");
-      else if (done >= limits.maxCodeIterations) {
-        transition(s, "BLOCKED", "reviewer", `code still needs changes after ${done} coder iteration(s) (limit ${limits.maxCodeIterations})`);
-      } else transition(s, "READY_FOR_CODING", "reviewer", "changes requested on code");
+      const done = submittedRuns(s, Role.enum.coder).length;
+      if (approved) {
+        const afterApproval = ctx.config.flow.docsCheck ? Status.enum.DOCS_CHECK : Status.enum.AWAITING_ACCEPTANCE;
+        transition(s, afterApproval, Actor.enum.reviewer, "code approved");
+      } else if (done >= limits.maxCodeIterations) {
+        const reason = `code still needs changes after ${done} coder iteration(s) (limit ${limits.maxCodeIterations})`;
+        transition(s, Status.enum.BLOCKED, Actor.enum.reviewer, reason);
+      } else transition(s, Status.enum.READY_FOR_CODING, Actor.enum.reviewer, "changes requested on code");
     }
     if (run2.output.findings.length) lines.push(`Findings registered: ${run2.output.findings.map((f) => `${f.id} (${f.severity})`).join(", ")}`);
   } else {
     const o = output2;
     run2.output = o;
     if (o.testDisputes.length) {
-      transition(s, "BLOCKED", "coder", `test dispute: ${o.testDisputes.map((d) => `${d.testId}: ${d.reason}`).join("; ")}`);
-    } else transition(s, "READY_FOR_CODE_REVIEW", "coder", `run ${run2.id} submitted`);
+      const disputes = o.testDisputes.map((dispute) => `${dispute.testId}: ${dispute.reason}`).join("; ");
+      transition(s, Status.enum.BLOCKED, Actor.enum.coder, `test dispute: ${disputes}`);
+    } else transition(s, Status.enum.READY_FOR_CODE_REVIEW, Actor.enum.coder, `run ${run2.id} submitted`);
   }
   return lines;
 }
 function submit(ctx, role, io) {
   const ref = findActiveTask(ctx);
-  if (!ref) throw mismatch(role, null, "submit");
+  if (!ref) throw mismatch(role, null, RoleAction.enum.submit);
   const pre = precheck(ctx, ref, role);
   if (!pre.ok) {
     io.err(`Submission rejected (attempt ${pre.attempt}/${pre.max}). Fix ${pre.outputFile} and run \`aw ${role} submit\` again:`);
@@ -25186,15 +25362,15 @@ function submit(ctx, role, io) {
   }
   const { gates: gateCfgs, files } = gatesFor(ctx, role, pre.state, pre.output);
   const results = runGates(ctx, ref, pre.runId, gateCfgs, files);
-  const disputes = role === "coder" && pre.output.testDisputes.length > 0;
-  const rejected = results.filter((g, i) => !g.ok && gateCfgs[i].onMismatch === "reject");
-  const warned = results.filter((g, i) => !g.ok && gateCfgs[i].onMismatch === "warn").map((g) => `gate ${g.name} expected ${g.expect} but exit was ${g.exitCode ?? "none"} \u2014 see ${g.logFile}`);
+  const disputes = role === Role.enum.coder && pre.output.testDisputes.length > 0;
+  const rejected = results.filter((g, i) => !g.ok && gateCfgs[i].onMismatch === GateMismatchPolicy.enum.reject);
+  const warned = results.filter((g, i) => !g.ok && gateCfgs[i].onMismatch === GateMismatchPolicy.enum.warn).map((g) => `gate ${g.name} expected ${g.expect} but exit was ${g.exitCode ?? "none"} \u2014 see ${g.logFile}`);
   if (rejected.length && !disputes) {
     const { attempt, max } = mutate(ref, (s) => {
       const run2 = activeRun(s);
       run2.gates.push(...results);
       run2.submitAttempts.push({ at: nowIso(), ok: false, errors: rejected.map(describeGate) });
-      addEvent(s, role, "gates_failed", rejected.map((g) => g.name).join(", "), run2.id);
+      addEvent(s, role, TaskEventName.enum.gates_failed, rejected.map((g) => g.name).join(", "), run2.id);
       return { attempt: run2.submitAttempts.length, max: ctx.config.limits.maxSubmitAttempts };
     });
     io.err(`Submission rejected (attempt ${attempt}/${max}): gate(s) failed.`);
@@ -25211,7 +25387,7 @@ Fix the cause and run \`aw ${role} submit\` again. If a protected test is wrong,
     run2.gates.push(...results);
     run2.warnings.push(...pre.warnings, ...warned);
     run2.submitAttempts.push({ at: nowIso(), ok: true, errors: [] });
-    run2.state = "submitted";
+    run2.state = RunState.enum.submitted;
     run2.finishedAt = nowIso();
     const lines2 = complete(ctx, ref, s, run2, pre.output);
     return { status: s.status, lines: lines2, runId: run2.id };
@@ -25228,12 +25404,12 @@ function fail(ctx, role, reason, io) {
   const ref = requireActiveTask(ctx);
   const runId = mutate(ref, (s) => {
     const run2 = activeRun(s);
-    if (!run2 || run2.role !== role || !stepForWorking(role, s.status)) throw mismatch(role, s.status, "fail");
-    run2.state = "failed";
+    if (!run2 || run2.role !== role || !stepForWorking(role, s.status)) throw mismatch(role, s.status, RoleAction.enum.fail);
+    run2.state = RunState.enum.failed;
     run2.failReason = reason;
     run2.finishedAt = nowIso();
     releaseNotes(s, run2.id);
-    transition(s, "BLOCKED", role, `${role} ${run2.id} failed: ${reason}`);
+    transition(s, Status.enum.BLOCKED, role, `${role} ${run2.id} failed: ${reason}`);
     return run2.id;
   });
   io.out(`Recorded: run ${runId} failed. Task is BLOCKED until the user decides.`);
@@ -25271,8 +25447,8 @@ function renderPlan(s, plan) {
 }
 var minutes = (a, b) => a && b ? `${Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 6e4))} min` : "\u2014";
 function runHeadline(r) {
-  const what = r.role === "reviewer" ? `reviewer (${r.target})` : r.role;
-  const verdict = r.role === "reviewer" && r.output ? ` \xB7 ${r.output.verdict}` : "";
+  const what = r.role === Role.enum.reviewer ? `reviewer (${r.target})` : r.role;
+  const verdict = r.role === Role.enum.reviewer && r.output ? ` \xB7 ${r.output.verdict}` : "";
   const rejects = r.submitAttempts.filter((a) => !a.ok).length;
   const testSeconds = Math.round(r.testRuns.reduce((sum, t) => sum + t.durationMs, 0) / 1e3);
   return `### ${r.id} \xB7 ${what} \xB7 iteration ${r.iteration} \xB7 ${r.state}${verdict} \xB7 ${minutes(r.startedAt, r.finishedAt)}${rejects ? ` \xB7 ${rejects} rejected submit(s)` : ""}${r.testRuns.length ? ` \xB7 ${r.testRuns.length} test run(s), ${testSeconds}s` : ""}`;
@@ -25285,17 +25461,17 @@ function renderRun(r, out) {
   const o = r.output;
   if (!o) return;
   out.push("", o.summary);
-  if (r.role === "tester" && r.output) {
+  if (r.role === Role.enum.tester && r.output) {
     for (const t of r.output.tests) out.push(`- ${t.id} [${t.kind}${t.edgeCase ? ", edge" : ""}; ${t.covers.join(", ")}] \`${t.file}\` \u2014 ${t.title}`);
     for (const u of r.output.untestedCriteria) out.push(`- Untested: ${u.ac} \u2014 ${u.reason}`);
   }
-  if (r.role === "reviewer" && r.output) {
+  if (r.role === Role.enum.reviewer && r.output) {
     for (const f of r.output.findings) out.push(`- ${describeFinding(f)}`);
     for (const p of r.output.previousFindings) out.push(`- ${p.id}: ${p.status}${p.note ? ` \u2014 ${p.note}` : ""}`);
     const cov = r.output.acCoverage.map((c) => `${c.ac} ${c.verdict}`).join(", ");
     if (cov) out.push(`- Coverage: ${cov}`);
   }
-  if (r.role === "coder" && r.output) {
+  if (r.role === Role.enum.coder && r.output) {
     for (const f of r.output.filesChanged) out.push(`- ${f.change} \`${f.path}\` \u2014 ${f.why}`);
     for (const d of r.output.decisions) out.push(`- Decision: ${d.decision} \u2014 ${d.rationale}`);
     for (const d of r.output.deviationsFromPlan) out.push(`- Deviation: ${d.what} \u2014 ${d.why}`);
@@ -25310,12 +25486,13 @@ function renderRun(r, out) {
 function renderReport(s) {
   const plan = s.plans.find((p) => p.revision === s.approvedPlanRevision) ?? s.plans.at(-1);
   const count = (role) => submittedRuns(s, role).length;
+  const iterations = `tests ${count(Role.enum.tester)}, code ${count(Role.enum.coder)}`;
   const out = [
     `# ${s.id} \xB7 ${s.title}`,
     "",
     `- Status: **${s.status}** \xB7 mode: ${s.mode} \xB7 source: ${s.source.kind}${s.source.ref ? ` (${s.source.ref})` : ""}`,
     `- Created: ${s.createdAt} \xB7 finished: ${s.acceptedAt ?? s.updatedAt} \xB7 duration: ${minutes(s.createdAt, s.acceptedAt ?? s.updatedAt)}`,
-    `- Iterations: tests ${count("tester")}, code ${count("coder")} \xB7 plan revisions: ${s.plans.length} \xB7 runs: ${s.runs.length}`
+    `- Iterations: ${iterations} \xB7 plan revisions: ${s.plans.length} \xB7 runs: ${s.runs.length}`
   ];
   if (plan) {
     out.push("", "## Plan (approved revision)", plan.summary, "", ...plan.acceptanceCriteria.map((a) => `- **${a.id}** ${a.text}`));
@@ -25328,7 +25505,7 @@ function renderReport(s) {
       out.push(`- ${d.at} \xB7 ${d.verdict}`, ...d.items.map((i) => `  - \`${i.path}\`: ${i.status} \u2014 ${i.note}`));
     }
   }
-  const followUps = s.runs.flatMap((r) => r.role === "reviewer" && r.output ? r.output.followUps : []);
+  const followUps = s.runs.flatMap((r) => r.role === Role.enum.reviewer && r.output ? r.output.followUps : []);
   if (followUps.length) out.push("", "## Follow-ups", ...followUps.map((f) => `- ${f.text}`));
   if (s.retro) {
     out.push("", "## Retro");
@@ -25363,40 +25540,40 @@ var USAGE2 = `aw sm <command>
   archive [--retro <retro.json>]   move a DONE/CANCELLED task to the archive
   repair                           accept a manual edit of state.json (asks the user to confirm)`;
 function smCommand(argv, io) {
-  const [sub, ...rest] = argv;
+  const [word, ...rest] = argv;
+  const action = SmAction.safeParse(word);
+  if (!action.success) throw new AwError(word ? `Unknown command: aw sm ${word}` : "Missing sm command.", EXIT.USAGE, USAGE2);
   const args = parseArgs(rest);
   const ctx = loadCtx(io.cwd);
-  switch (sub) {
-    case "new":
+  switch (action.data) {
+    case SmAction.enum.new:
       return smNew(ctx, args, io);
-    case "plan":
+    case SmAction.enum.plan:
       return smPlan(ctx, args, io);
-    case "approve":
+    case SmAction.enum.approve:
       return smApprove(ctx, args, io);
-    case "next":
+    case SmAction.enum.next:
       return smNext(ctx, io);
-    case "note":
+    case SmAction.enum.note:
       return smNote(ctx, args, io);
-    case "block":
+    case SmAction.enum.block:
       return smBlock(ctx, args, io);
-    case "unblock":
+    case SmAction.enum.unblock:
       return smUnblock(ctx, args, io);
-    case "cancel":
+    case SmAction.enum.cancel:
       return smCancel(ctx, args, io);
-    case "reset":
+    case SmAction.enum.reset:
       return smReset(ctx, args, io);
-    case "docs":
+    case SmAction.enum.docs:
       return smDocs(ctx, args, io);
-    case "accept":
+    case SmAction.enum.accept:
       return smAccept(ctx, args, io);
-    case "reopen":
+    case SmAction.enum.reopen:
       return smReopen(ctx, args, io);
-    case "archive":
+    case SmAction.enum.archive:
       return smArchive(ctx, args, io);
-    case "repair":
+    case SmAction.enum.repair:
       return smRepair(ctx, io);
-    default:
-      throw new AwError(sub ? `Unknown command: aw sm ${sub}` : "Missing sm command.", EXIT.USAGE, USAGE2);
   }
 }
 function expectStatus(s, allowed, action) {
@@ -25445,7 +25622,7 @@ function smNew(ctx, args, io) {
     title,
     mode: mode.data,
     source: { kind, ...sourceRef ? { ref: sourceRef } : {} },
-    status: "PLANNING",
+    status: Status.enum.PLANNING,
     createdAt: now,
     updatedAt: now,
     git: gitInfo(ctx),
@@ -25458,7 +25635,7 @@ function smNew(ctx, args, io) {
     lastSpawn: {},
     counters: { run: 0, test: 0, finding: 0, note: 0 }
   };
-  addEvent(s, "scrum-master", "task_created", `mode ${mode.data}, source ${kind}`);
+  addEvent(s, Actor.enum["scrum-master"], TaskEventName.enum.task_created, `mode ${mode.data}, source ${kind}`);
   writeState(ref, s);
   io.out(`Created task ${id} (${mode.data}) in ${rel(ctx, ref.dir)}`);
   io.out(`Requirements: ${rel(ctx, p.requirements)}${reqFile ? " (copied)" : " \u2014 write the task text there VERBATIM"}`);
@@ -25476,7 +25653,7 @@ function smPlan(ctx, args, io) {
   if (!requirements) {
     throw new AwError(`requirements.md is empty. Write the task text verbatim into ${rel(ctx, p.requirements)} first.`, EXIT.VALIDATION);
   }
-  if (input2.mode === "tdd" && !input2.contract.trim()) {
+  if (input2.mode === Mode.enum.tdd && !input2.contract.trim()) {
     throw new AwError(
       "tdd mode needs a contract (modules, function signatures, endpoints, error shapes): the tester writes tests against it before any code exists.",
       EXIT.VALIDATION
@@ -25484,7 +25661,7 @@ function smPlan(ctx, args, io) {
   }
   const { acceptanceCriteria, ...rest } = input2;
   const s = mutate(ref, (s2) => {
-    expectStatus(s2, ["PLANNING", "AWAITING_APPROVAL"], "submit a plan");
+    expectStatus(s2, [Status.enum.PLANNING, Status.enum.AWAITING_APPROVAL], "submit a plan");
     const revision = s2.plans.length + 1;
     const plan2 = {
       ...rest,
@@ -25497,11 +25674,13 @@ function smPlan(ctx, args, io) {
     if (input2.title) s2.title = input2.title;
     writeFileAtomic(p.plan, renderPlan(s2, plan2));
     if (ctx.config.flow.requireApproval[input2.mode]) {
-      if (s2.status === "PLANNING") transition(s2, "AWAITING_APPROVAL", "scrum-master", `plan revision ${revision}`);
-      else addEvent(s2, "scrum-master", "plan_revised", `revision ${revision}`);
+      if (s2.status === Status.enum.PLANNING) {
+        transition(s2, Status.enum.AWAITING_APPROVAL, Actor.enum["scrum-master"], `plan revision ${revision}`);
+      } else addEvent(s2, Actor.enum["scrum-master"], TaskEventName.enum.plan_revised, `revision ${revision}`);
     } else {
       s2.approvedPlanRevision = revision;
-      transition(s2, firstWorkStatus(input2.mode), "scrum-master", `plan revision ${revision} auto-approved (flow.requireApproval.${input2.mode} = false)`);
+      const reason = `plan revision ${revision} auto-approved (flow.requireApproval.${input2.mode} = false)`;
+      transition(s2, firstWorkStatus(input2.mode), Actor.enum["scrum-master"], reason);
     }
     return s2;
   });
@@ -25513,10 +25692,10 @@ function smPlan(ctx, args, io) {
 }
 function smApprove(ctx, args, io) {
   const s = mutate(requireActiveTask(ctx), (s2) => {
-    expectStatus(s2, ["AWAITING_APPROVAL"], "approve");
+    expectStatus(s2, [Status.enum.AWAITING_APPROVAL], "approve");
     const plan = s2.plans.at(-1);
     s2.approvedPlanRevision = plan.revision;
-    transition(s2, firstWorkStatus(s2.mode), "user", str(args, "note") ?? `plan revision ${plan.revision} approved`);
+    transition(s2, firstWorkStatus(s2.mode), Actor.enum.user, str(args, "note") ?? `plan revision ${plan.revision} approved`);
     return s2;
   });
   io.out(`Plan revision ${s.approvedPlanRevision} approved.`);
@@ -25534,10 +25713,12 @@ function smNote(ctx, args, io) {
   const role = Role.safeParse(requireStr(args, "for", usage));
   if (!role.success) throw new AwError("--for must be tester, reviewer or coder.", EXIT.USAGE);
   const text = requireStr(args, "text", usage);
-  const source = str(args, "source") === "scrum-master" ? "scrum-master" : "user";
+  const fromScrumMaster = str(args, "source") === NoteSource.enum["scrum-master"];
+  const source = fromScrumMaster ? NoteSource.enum["scrum-master"] : NoteSource.enum.user;
+  const author = fromScrumMaster ? Actor.enum["scrum-master"] : Actor.enum.user;
   const note = mutate(requireActiveTask(ctx), (s) => {
     if (TERMINAL.includes(s.status)) throw new AwError(`Task is ${s.status}.`, EXIT.STATUS_MISMATCH);
-    return addNote(s, role.data, source, text, source);
+    return addNote(s, role.data, source, text, author);
   });
   io.out(`Note ${note.id} queued for the next ${role.data} run.`);
   return EXIT.OK;
@@ -25545,7 +25726,7 @@ function smNote(ctx, args, io) {
 function abandonActiveRun2(s, reason) {
   const run2 = activeRun(s);
   if (!run2) return;
-  run2.state = "abandoned";
+  run2.state = RunState.enum.abandoned;
   run2.finishedAt = nowIso();
   run2.failReason = reason;
   releaseNotes2(s, run2.id);
@@ -25554,7 +25735,7 @@ function smBlock(ctx, args, io) {
   const reason = requireStr(args, "reason", 'aw sm block --reason "<why>"');
   const s = mutate(requireActiveTask(ctx), (s2) => {
     abandonActiveRun2(s2, `blocked: ${reason}`);
-    transition(s2, "BLOCKED", "scrum-master", reason);
+    transition(s2, Status.enum.BLOCKED, Actor.enum["scrum-master"], reason);
     return s2;
   });
   io.out(`Task ${s.id} blocked.`);
@@ -25567,11 +25748,14 @@ function smUnblock(ctx, args, io) {
   if (!to.success) throw new AwError(`--to must be one of: ${Status.options.join(", ")}`, EXIT.USAGE);
   const note = str(args, "note");
   const s = mutate(requireActiveTask(ctx), (s2) => {
-    expectStatus(s2, ["BLOCKED"], "unblock");
+    expectStatus(s2, [Status.enum.BLOCKED], "unblock");
     const wasDispute = s2.blocked?.reason.startsWith("test dispute") ?? false;
-    transition(s2, to.data, "user", note);
+    transition(s2, to.data, Actor.enum.user, note);
     const target = roleForStatus(to.data);
-    if (note && target?.phase === "ready") addNote(s2, target.role, wasDispute ? "dispute" : "block", note, "user");
+    if (note && target?.phase === "ready") {
+      const source = wasDispute ? NoteSource.enum.dispute : NoteSource.enum.block;
+      addNote(s2, target.role, source, note, Actor.enum.user);
+    }
     return s2;
   });
   io.out(`Unblocked \u2192 ${s.status}.`);
@@ -25582,7 +25766,7 @@ function smCancel(ctx, args, io) {
   const reason = requireStr(args, "reason", 'aw sm cancel --reason "<why>"');
   const s = mutate(requireActiveTask(ctx), (s2) => {
     abandonActiveRun2(s2, `cancelled: ${reason}`);
-    transition(s2, "CANCELLED", "user", reason);
+    transition(s2, Status.enum.CANCELLED, Actor.enum.user, reason);
     return s2;
   });
   io.out(`Task ${s.id} cancelled.`);
@@ -25596,7 +25780,7 @@ function smReset(ctx, args, io) {
     if (!r || !step) throw new AwError(`Nothing to reset: status ${s2.status} is not an agent's working status.`, EXIT.STATUS_MISMATCH);
     const run2 = activeRun(s2);
     abandonActiveRun2(s2, str(args, "note") ?? "reset by orchestrator");
-    transition(s2, step.ready, "scrum-master", str(args, "note") ?? `run ${run2?.id ?? "?"} reset`);
+    transition(s2, step.ready, Actor.enum["scrum-master"], str(args, "note") ?? `run ${run2?.id ?? "?"} reset`);
     return s2;
   });
   io.out(`Reset \u2192 ${s.status}.`);
@@ -25607,15 +25791,15 @@ function smDocs(ctx, args, io) {
   const file2 = requireStr(args, "file", "aw sm docs --file <docs.json>");
   const input2 = parseInput(DocsCheckInput, readInputJson(io, file2), file2, "docs");
   const s = mutate(requireActiveTask(ctx), (s2) => {
-    expectStatus(s2, ["DOCS_CHECK"], "record a docs check");
+    expectStatus(s2, [Status.enum.DOCS_CHECK], "record a docs check");
     s2.docsChecks.push({ ...input2, at: nowIso() });
-    if (input2.verdict === "needs_changes") {
-      for (const item of input2.items.filter((i) => i.status === "missing")) {
-        addNote(s2, "coder", "docs-check", `Update ${item.path}: ${item.note}`, "scrum-master");
+    if (input2.verdict === DocsVerdict.enum.needs_changes) {
+      for (const item of input2.items.filter((i) => i.status === DocStatus.enum.missing)) {
+        addNote(s2, Role.enum.coder, NoteSource.enum["docs-check"], `Update ${item.path}: ${item.note}`, Actor.enum["scrum-master"]);
       }
-      transition(s2, "READY_FOR_CODING", "scrum-master", "documentation needs changes");
+      transition(s2, Status.enum.READY_FOR_CODING, Actor.enum["scrum-master"], "documentation needs changes");
     } else {
-      transition(s2, "AWAITING_ACCEPTANCE", "scrum-master", "documentation ok");
+      transition(s2, Status.enum.AWAITING_ACCEPTANCE, Actor.enum["scrum-master"], "documentation ok");
     }
     return s2;
   });
@@ -25625,9 +25809,9 @@ function smDocs(ctx, args, io) {
 }
 function smAccept(ctx, args, io) {
   const s = mutate(requireActiveTask(ctx), (s2) => {
-    expectStatus(s2, ["AWAITING_ACCEPTANCE"], "accept");
+    expectStatus(s2, [Status.enum.AWAITING_ACCEPTANCE], "accept");
     s2.acceptedAt = nowIso();
-    transition(s2, "DONE", "user", str(args, "note") ?? "accepted");
+    transition(s2, Status.enum.DONE, Actor.enum.user, str(args, "note") ?? "accepted");
     return s2;
   });
   io.out(`Task ${s.id} accepted.`);
@@ -25640,7 +25824,7 @@ function smReopen(ctx, args, io) {
   const note = requireStr(args, "note", usage);
   if (!["PLANNING", "READY_FOR_TESTS", "READY_FOR_CODING"].includes(to)) throw new AwError(`--to must be PLANNING, READY_FOR_TESTS or READY_FOR_CODING.`, EXIT.USAGE);
   const s = mutate(requireActiveTask(ctx), (s2) => {
-    expectStatus(s2, ["AWAITING_ACCEPTANCE"], "reopen");
+    expectStatus(s2, [Status.enum.AWAITING_ACCEPTANCE], "reopen");
     const target = roleForStatus(to);
     if (target && pendingNotes(s2, target.role).length === 0) {
       throw new AwError(
@@ -25649,7 +25833,7 @@ function smReopen(ctx, args, io) {
         `First add each of the user's remarks as its own note: aw sm note --for ${target.role} --text "<remark>" \u2014 then reopen.`
       );
     }
-    transition(s2, to, "user", note);
+    transition(s2, to, Actor.enum.user, note);
     return s2;
   });
   io.out(`Reopened \u2192 ${s.status}.`);
@@ -25665,13 +25849,15 @@ function archiveName(ctx, id) {
 function collectBacklog(s, retroImprovements) {
   const at = nowIso();
   const items = [];
-  const add = (kind, text, extra = {}) => items.push({ kind, text, taskId: s.id, createdAt: at, status: "open", ...extra });
+  const add = (kind, text, extra = {}) => items.push({ kind, text, taskId: s.id, createdAt: at, status: BacklogStatus.enum.open, ...extra });
   for (const r of s.runs) {
     if (!r.output) continue;
-    if (r.role === "reviewer") for (const f of r.output.followUps) add("followUp", f.text, { runId: r.id, role: r.role });
-    for (const n of r.output.processNotes) add("processNote", n, { runId: r.id, role: r.role });
+    if (r.role === Role.enum.reviewer) {
+      for (const f of r.output.followUps) add(BacklogKind.enum.followUp, f.text, { runId: r.id, role: r.role });
+    }
+    for (const n of r.output.processNotes) add(BacklogKind.enum.processNote, n, { runId: r.id, role: r.role });
   }
-  for (const x of retroImprovements) add("processImprovement", x, { role: "scrum-master" });
+  for (const x of retroImprovements) add(BacklogKind.enum.processImprovement, x, { role: "scrum-master" });
   return items;
 }
 function smArchive(ctx, args, io) {
@@ -25681,7 +25867,7 @@ function smArchive(ctx, args, io) {
   const s = mutate(ref, (s2) => {
     expectStatus(s2, [...TERMINAL], "archive");
     if (retro) s2.retro = { ...retro, at: nowIso() };
-    addEvent(s2, "scrum-master", "archived");
+    addEvent(s2, Actor.enum["scrum-master"], TaskEventName.enum.archived);
     return s2;
   });
   writeFileAtomic(taskPaths(ref).report, renderReport(s));
@@ -25704,7 +25890,7 @@ function smRepair(ctx, io) {
   const ref = requireActiveTask(ctx);
   withLock(ref, () => {
     const s = readState(ref, { verifyHash: false });
-    addEvent(s, "user", "state_repaired", "manual edit of state.json accepted");
+    addEvent(s, Actor.enum.user, TaskEventName.enum.state_repaired, "manual edit of state.json accepted");
     writeState(ref, s);
   });
   io.out(`state.json of ${ref.id} re-validated and re-sealed.`);
@@ -25741,7 +25927,7 @@ function testCommand(argv, io) {
     try {
       mutate(ref, (s) => {
         const r = s.runs.find((x) => x.id === run2.id);
-        if (r?.state !== "active") return;
+        if (r?.state !== RunState.enum.active) return;
         r.testRuns.push({
           at: nowIso(),
           durationMs: res.durationMs,
@@ -25791,46 +25977,51 @@ Info:
   aw stats | aw doctor
 Setup:
   aw init [--force] [--language <lang>]`;
+var COMMAND_FLAGS = /* @__PURE__ */ new Map([
+  ["--version", AwCommand.enum.version],
+  ["--help", AwCommand.enum.help],
+  ["-h", AwCommand.enum.help]
+]);
+function commandWord(word) {
+  if (word === void 0) return AwCommand.enum.help;
+  return COMMAND_FLAGS.get(word) ?? word;
+}
 function run(argv, io) {
-  const [cmd, ...rest] = argv;
+  const [word, ...rest] = argv;
   try {
-    switch (cmd) {
-      case "sm":
+    const command = AwCommand.safeParse(commandWord(word));
+    if (!command.success) throw new AwError(`Unknown command: ${word}`, EXIT.USAGE, "Run `aw help`.");
+    switch (command.data) {
+      case AwCommand.enum.sm:
         return smCommand(rest, io);
-      case "tester":
-      case "reviewer":
-      case "coder":
-        return roleCommand(Role.parse(cmd), rest, io);
-      case "test":
+      case AwCommand.enum.tester:
+      case AwCommand.enum.reviewer:
+      case AwCommand.enum.coder:
+        return roleCommand(command.data, rest, io);
+      case AwCommand.enum.test:
         return testCommand(rest, io);
-      case "refine":
+      case AwCommand.enum.refine:
         return refineCommand(rest, io);
-      case "show":
+      case AwCommand.enum.show:
         return showCommand(rest, io);
-      case "schema":
+      case AwCommand.enum.schema:
         return schemaCommand(rest, io);
-      case "backlog":
+      case AwCommand.enum.backlog:
         return backlogCommand(rest, io);
-      case "stats":
+      case AwCommand.enum.stats:
         return statsCommand(rest, io);
-      case "doctor":
+      case AwCommand.enum.doctor:
         return doctorCommand(rest, io);
-      case "init":
+      case AwCommand.enum.init:
         return initCommand(rest, io);
-      case "hook":
+      case AwCommand.enum.hook:
         return hookCommand(rest, io);
-      case "--version":
-      case "version":
+      case AwCommand.enum.version:
         io.out(VERSION);
         return EXIT.OK;
-      case void 0:
-      case "help":
-      case "--help":
-      case "-h":
+      case AwCommand.enum.help:
         io.out(HELP);
         return EXIT.OK;
-      default:
-        throw new AwError(`Unknown command: ${cmd}`, EXIT.USAGE, "Run `aw help`.");
     }
   } catch (e) {
     if (e instanceof AwError) {

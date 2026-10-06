@@ -33,13 +33,19 @@ import {
 } from "../core/refinementStore";
 import { checkRefineOutput } from "../core/validate";
 import type { Io } from "../io";
+import { RefineAction } from "../schema/commands";
 import { RefineOutput } from "../schema/outputs";
 import {
   FINAL_REFINEMENT_STATUSES,
+  RefinementActor,
+  RefinementEventName,
   RefinementId,
   type RefinementRevision,
   type RefinementRun,
+  RefinementRunState,
+  RefinementSourceKind,
   type RefinementState,
+  RefinementStatus,
 } from "../schema/refinement";
 import { type Args, bool, parseArgs, requireStr, str } from "../util/args";
 import { AwError, EXIT } from "../util/errors";
@@ -60,21 +66,21 @@ const USAGE = `aw refine <command>
   show [<id>] [--json]             list the refinements, or one refinement's items`;
 
 export function refineCommand(argv: string[], io: Io): number {
-  const [sub, ...rest] = argv;
+  const [word, ...rest] = argv;
+  const action = RefineAction.safeParse(word);
+  if (!action.success) throw new AwError(word ? `Unknown command: aw refine ${word}` : "Missing the refine command.", EXIT.USAGE, USAGE);
   const args = parseArgs(rest, ["json"]);
   const ctx = loadCtx(io.cwd);
-  switch (sub) {
-    case "new": return refineNew(ctx, args, io);
-    case "next": return refineNext(ctx, args, io);
-    case "start-agent": return refineStartAgent(ctx, args, io);
-    case "submit": return refineSubmit(ctx, io);
-    case "note": return refineNote(ctx, args, io);
-    case "approve": return refineApprove(ctx, args, io);
-    case "cancel": return refineCancel(ctx, args, io);
-    case "reset": return refineReset(ctx, args, io);
-    case "show": return refineShow(ctx, args, io);
-    default:
-      throw new AwError(sub ? `Unknown command: aw refine ${sub}` : "Missing the refine command.", EXIT.USAGE, USAGE);
+  switch (action.data) {
+    case RefineAction.enum.new: return refineNew(ctx, args, io);
+    case RefineAction.enum.next: return refineNext(ctx, args, io);
+    case RefineAction.enum["start-agent"]: return refineStartAgent(ctx, args, io);
+    case RefineAction.enum.submit: return refineSubmit(ctx, io);
+    case RefineAction.enum.note: return refineNote(ctx, args, io);
+    case RefineAction.enum.approve: return refineApprove(ctx, args, io);
+    case RefineAction.enum.cancel: return refineCancel(ctx, args, io);
+    case RefineAction.enum.reset: return refineReset(ctx, args, io);
+    case RefineAction.enum.show: return refineShow(ctx, args, io);
   }
 }
 
@@ -106,8 +112,8 @@ function refineNew(ctx: Ctx, args: Args, io: Io): number {
     schemaVersion: 1,
     id,
     title,
-    source: inputFile ? { kind: "file", ref: inputFile } : { kind: "manual" },
-    status: "DRAFT",
+    source: inputFile ? { kind: RefinementSourceKind.enum.file, ref: inputFile } : { kind: RefinementSourceKind.enum.manual },
+    status: RefinementStatus.enum.DRAFT,
     createdAt: now,
     updatedAt: now,
     runs: [],
@@ -116,7 +122,7 @@ function refineNew(ctx: Ctx, args: Args, io: Io): number {
     history: [],
     counters: { run: 0, note: 0 },
   };
-  addRefinementEvent(s, "scrum-master", "refinement_created", inputFile ? `input from ${inputFile}` : undefined);
+  addRefinementEvent(s, RefinementActor.enum["scrum-master"], RefinementEventName.enum.refinement_created, inputFile ? `input from ${inputFile}` : undefined);
   writeRefinement(ref, s);
 
   io.out(`Created refinement ${id} in ${rel(ctx, ref.dir)}`);
@@ -155,18 +161,24 @@ function refineStartAgent(ctx: Ctx, args: Args, io: Io): number {
   }
   const paths = refinementPaths(ref);
   const { state, run } = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["DRAFT"], "start-agent");
+    requireStatus(s, [RefinementStatus.enum.DRAFT], RefineAction.enum["start-agent"]);
     if (!writtenInput(readTextIfExists(paths.input))) {
       throw new AwError(`${rel(ctx, paths.input)} is empty. Write the slice description there first.`, EXIT.VALIDATION);
     }
-    const run: RefinementRun = { id: nextRefinementId(s, "run", "R"), state: "active", startedAt: nowIso(), consumedNotes: [], stopBlocks: 0 };
+    const run: RefinementRun = {
+      id: nextRefinementId(s, "run", "R"),
+      state: RefinementRunState.enum.active,
+      startedAt: nowIso(),
+      consumedNotes: [],
+      stopBlocks: 0,
+    };
     for (const note of pendingRefinementNotes(s)) {
       note.consumedByRun = run.id;
       run.consumedNotes.push(note.id);
     }
     s.runs.push(run);
-    s.status = "WORKING";
-    addRefinementEvent(s, "scrum-master", "agent_started", run.id);
+    s.status = RefinementStatus.enum.WORKING;
+    addRefinementEvent(s, RefinementActor.enum["scrum-master"], RefinementEventName.enum.agent_started, run.id);
     return { state: s, run };
   });
 
@@ -204,7 +216,7 @@ function refineSubmit(ctx: Ctx, io: Io): number {
   const output = parseInput(RefineOutput, readInputJson(io, paths.proposal), proposalFile, "refine");
 
   const { state, revision } = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["WORKING"], "submit");
+    requireStatus(s, [RefinementStatus.enum.WORKING], RefineAction.enum.submit);
     const run = activeRefinementRun(s);
     if (!run) throw new AwError(`Refinement ${s.id} has no active run.`, EXIT.STATUS_MISMATCH);
     const errors = checkRefineOutput(ctx.config.refine, output, run.consumedNotes);
@@ -217,10 +229,11 @@ function refineSubmit(ctx: Ctx, io: Io): number {
     }
     const revision: RefinementRevision = toRevision(s, run, output);
     s.revisions.push(revision);
-    run.state = "submitted";
+    run.state = RefinementRunState.enum.submitted;
     run.finishedAt = nowIso();
-    s.status = "PROPOSED";
-    addRefinementEvent(s, "product-owner", "proposal_submitted", `revision ${revision.revision}, ${revision.items.length} items`);
+    s.status = RefinementStatus.enum.PROPOSED;
+    const summary = `revision ${revision.revision}, ${revision.items.length} items`;
+    addRefinementEvent(s, RefinementActor.enum["product-owner"], RefinementEventName.enum.proposal_submitted, summary);
     return { state: s, revision };
   });
 
@@ -238,11 +251,11 @@ function refineNote(ctx: Ctx, args: Args, io: Io): number {
   const ref = requireRefinement(ctx, args.positionals[0], usage);
   const text = requireStr(args, "text", usage);
   const note = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["PROPOSED", "DRAFT"], "note");
+    requireStatus(s, [RefinementStatus.enum.PROPOSED, RefinementStatus.enum.DRAFT], RefineAction.enum.note);
     const note = { id: nextRefinementId(s, "note", "N"), text, at: nowIso() };
     s.notes.push(note);
-    if (s.status === "PROPOSED") s.status = "DRAFT";
-    addRefinementEvent(s, "user", "note_added", note.id);
+    if (s.status === RefinementStatus.enum.PROPOSED) s.status = RefinementStatus.enum.DRAFT;
+    addRefinementEvent(s, RefinementActor.enum.user, RefinementEventName.enum.note_added, note.id);
     return note;
   });
   io.out(`Note ${note.id} queued for the next product-owner run of ${ref.id}.`);
@@ -253,12 +266,12 @@ function refineApprove(ctx: Ctx, args: Args, io: Io): number {
   const ref = requireRefinement(ctx, args.positionals[0], "aw refine approve <id>");
   const paths = refinementPaths(ref);
   const { state, revision } = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["PROPOSED"], "approve");
+    requireStatus(s, [RefinementStatus.enum.PROPOSED], RefineAction.enum.approve);
     const revision = latestRevision(s);
     if (!revision) throw new AwError(`Refinement ${s.id} has no proposal to approve.`, EXIT.STATUS_MISMATCH);
     s.approvedRevision = revision.revision;
-    s.status = "APPROVED";
-    addRefinementEvent(s, "user", "approved", `revision ${revision.revision}`);
+    s.status = RefinementStatus.enum.APPROVED;
+    addRefinementEvent(s, RefinementActor.enum.user, RefinementEventName.enum.approved, `revision ${revision.revision}`);
     return { state: s, revision };
   });
 
@@ -278,10 +291,10 @@ function refineCancel(ctx: Ctx, args: Args, io: Io): number {
   const ref = requireRefinement(ctx, args.positionals[0], usage);
   const reason = requireStr(args, "reason", usage);
   mutateRefinement(ref, (s) => {
-    requireStatus(s, ["DRAFT", "WORKING", "PROPOSED"], "cancel");
+    requireStatus(s, [RefinementStatus.enum.DRAFT, RefinementStatus.enum.WORKING, RefinementStatus.enum.PROPOSED], RefineAction.enum.cancel);
     abandonActiveRun(s, `cancelled: ${reason}`);
-    s.status = "CANCELLED";
-    addRefinementEvent(s, "user", "cancelled", reason);
+    s.status = RefinementStatus.enum.CANCELLED;
+    addRefinementEvent(s, RefinementActor.enum.user, RefinementEventName.enum.cancelled, reason);
   });
   io.out(`Refinement ${ref.id} cancelled.`);
   return EXIT.OK;
@@ -290,11 +303,11 @@ function refineCancel(ctx: Ctx, args: Args, io: Io): number {
 function refineReset(ctx: Ctx, args: Args, io: Io): number {
   const ref = requireRefinement(ctx, args.positionals[0], "aw refine reset <id>");
   const runId = mutateRefinement(ref, (s) => {
-    requireStatus(s, ["WORKING"], "reset");
+    requireStatus(s, [RefinementStatus.enum.WORKING], RefineAction.enum.reset);
     const run = activeRefinementRun(s);
     abandonActiveRun(s, "reset by the orchestrator");
-    s.status = "DRAFT";
-    addRefinementEvent(s, "scrum-master", "agent_reset", run?.id);
+    s.status = RefinementStatus.enum.DRAFT;
+    addRefinementEvent(s, RefinementActor.enum["scrum-master"], RefinementEventName.enum.agent_reset, run?.id);
     return run?.id ?? "?";
   });
   io.out(`Run ${runId} discarded; refinement ${ref.id} is DRAFT again. Start a fresh agent with \`aw refine start-agent ${ref.id}\`.`);

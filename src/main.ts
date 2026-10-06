@@ -6,7 +6,7 @@ import { roleCommand } from "./commands/role";
 import { smCommand } from "./commands/sm";
 import { testCommand } from "./commands/test";
 import type { Io } from "./io";
-import { Role } from "./schema/status";
+import { AwCommand } from "./schema/commands";
 import { AwError, EXIT } from "./util/errors";
 
 export const VERSION = "0.2.0";
@@ -33,35 +33,44 @@ Info:
 Setup:
   aw init [--force] [--language <lang>]`;
 
+/** Flags that work like commands: `aw --version`, `aw --help`, `aw -h`. */
+const COMMAND_FLAGS = new Map<string, AwCommand>([
+  ["--version", AwCommand.enum.version],
+  ["--help", AwCommand.enum.help],
+  ["-h", AwCommand.enum.help],
+]);
+
+/** The command word of `aw <word> …`; `aw` alone shows the help. */
+function commandWord(word: string | undefined): string {
+  if (word === undefined) return AwCommand.enum.help;
+  return COMMAND_FLAGS.get(word) ?? word;
+}
+
 export function run(argv: string[], io: Io): number {
-  const [cmd, ...rest] = argv;
+  const [word, ...rest] = argv;
   try {
-    switch (cmd) {
-      case "sm": return smCommand(rest, io);
-      case "tester":
-      case "reviewer":
-      case "coder": return roleCommand(Role.parse(cmd), rest, io);
-      case "test": return testCommand(rest, io);
-      case "refine": return refineCommand(rest, io);
-      case "show": return showCommand(rest, io);
-      case "schema": return schemaCommand(rest, io);
-      case "backlog": return backlogCommand(rest, io);
-      case "stats": return statsCommand(rest, io);
-      case "doctor": return doctorCommand(rest, io);
-      case "init": return initCommand(rest, io);
-      case "hook": return hookCommand(rest, io);
-      case "--version":
-      case "version":
+    const command = AwCommand.safeParse(commandWord(word));
+    if (!command.success) throw new AwError(`Unknown command: ${word}`, EXIT.USAGE, "Run `aw help`.");
+    switch (command.data) {
+      case AwCommand.enum.sm: return smCommand(rest, io);
+      case AwCommand.enum.tester:
+      case AwCommand.enum.reviewer:
+      case AwCommand.enum.coder: return roleCommand(command.data, rest, io);
+      case AwCommand.enum.test: return testCommand(rest, io);
+      case AwCommand.enum.refine: return refineCommand(rest, io);
+      case AwCommand.enum.show: return showCommand(rest, io);
+      case AwCommand.enum.schema: return schemaCommand(rest, io);
+      case AwCommand.enum.backlog: return backlogCommand(rest, io);
+      case AwCommand.enum.stats: return statsCommand(rest, io);
+      case AwCommand.enum.doctor: return doctorCommand(rest, io);
+      case AwCommand.enum.init: return initCommand(rest, io);
+      case AwCommand.enum.hook: return hookCommand(rest, io);
+      case AwCommand.enum.version:
         io.out(VERSION);
         return EXIT.OK;
-      case undefined:
-      case "help":
-      case "--help":
-      case "-h":
+      case AwCommand.enum.help:
         io.out(HELP);
         return EXIT.OK;
-      default:
-        throw new AwError(`Unknown command: ${cmd}`, EXIT.USAGE, "Run `aw help`.");
     }
   } catch (e) {
     if (e instanceof AwError) {

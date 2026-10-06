@@ -1,7 +1,8 @@
 /** The text an agent receives from `aw <role> start`: everything it needs for this run, and nothing it doesn't. */
 import * as path from "node:path";
-import type { ReviewerRun, Run, TaskState } from "../schema/state";
-import type { Role } from "../schema/status";
+import type { Gate } from "../schema/config";
+import type { ReviewerRun, Run, StoredFinding, TaskState } from "../schema/state";
+import { Mode, ReviewTarget, Role } from "../schema/status";
 import { readTextIfExists } from "../util/fsx";
 import { describeGate } from "./gates";
 import {
@@ -72,7 +73,7 @@ export function buildBriefing(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run): s
   const plan = currentPlan(s);
   const out: string[] = [];
   const h = (title: string) => out.push("", `## ${title}`);
-  const roleLabel = run.role === "reviewer" ? `reviewer (${(run as ReviewerRun).target} review)` : run.role;
+  const roleLabel = run.role === Role.enum.reviewer ? `reviewer (${(run as ReviewerRun).target} review)` : run.role;
 
   out.push(
     `# aw briefing · ${roleLabel} · task ${s.id} · run ${run.id} (iteration ${run.iteration})`,
@@ -96,9 +97,9 @@ export function buildBriefing(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run): s
   h("Acceptance criteria");
   for (const ac of plan?.acceptanceCriteria ?? []) out.push(`- ${ac.id}: ${ac.text}`);
 
-  if (run.role === "tester") testerSection(ctx, s, run, h, out);
-  if (run.role === "coder") coderSection(ctx, ref, s, run, h, out);
-  if (run.role === "reviewer") reviewerSection(ctx, s, run as ReviewerRun, h, out);
+  if (run.role === Role.enum.tester) testerSection(ctx, s, run, h, out);
+  if (run.role === Role.enum.coder) coderSection(ctx, ref, s, run, h, out);
+  if (run.role === Role.enum.reviewer) reviewerSection(ctx, s, run as ReviewerRun, h, out);
 
   mustAddress(s, run, h, out);
   codeStandardsSection(ctx, h, out);
@@ -110,7 +111,7 @@ export function buildBriefing(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run): s
   }
 
   h("Your output");
-  const gates = run.role === "tester" ? ctx.config.gates.afterTests : run.role === "coder" ? ctx.config.gates.afterCoding : [];
+  const gates = gatesAfterSubmit(ctx, run.role);
   out.push(
     `1. Write your result as JSON to: ${run.outputFile}`,
     `   Format: run \`${awCmd(`schema ${run.role}`)}\` (JSON Schema + example). Do not invent IDs — reference only IDs shown in this briefing.`,
@@ -131,7 +132,7 @@ type H = (title: string) => void;
  * again would only repeat them; the reviewer's briefing carries just the criteria.
  */
 function planReadingHint(role: Role): string {
-  if (role === "reviewer") return "the acceptance criteria are below; read the contract, out-of-scope items and risks there.";
+  if (role === Role.enum.reviewer) return "the acceptance criteria are below; read the contract, out-of-scope items and risks there.";
   return "the acceptance criteria and the parts of the plan you need are below; open it only for the summary, out-of-scope items and risks.";
 }
 
@@ -151,7 +152,7 @@ function testerSection(ctx: Ctx, s: TaskState, run: Run, h: H, out: string[]): v
     "You write tests only — never the feature under test, anywhere (not in a scratch copy either). The coder builds it; your tests are the contract it must satisfy.",
     `You may only create or edit files matching tests.globs: ${ctx.config.tests.globs.join(", ")}. Other writes are blocked.`,
     "Map every test to the criteria it verifies (`covers`) and mark edge cases. Every criterion must be covered or listed in `untestedCriteria` with a reason.",
-    testsHowTo(ctx, "tester"),
+    testsHowTo(ctx, Role.enum.tester),
   );
   const prev = latestSubmittedTester(s);
   if (run.iteration > 1 && prev?.output) {
@@ -170,7 +171,7 @@ function coderSection(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run, h: H, out:
   for (const step of plan?.approach ?? []) out.push(`- ${step}`);
 
   h("Your job");
-  if (s.mode === "tdd") {
+  if (s.mode === Mode.enum.tdd) {
     out.push("Implement the plan so that the protected tests pass. Do not change the protected test files — edits are blocked and checked at submit.");
     const tests = protectedTests(s);
     if (tests.length) {
@@ -195,17 +196,17 @@ function coderSection(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run, h: H, out:
     out.push("", "Documentation index — update what your change affects and list it in `docsUpdated`:");
     for (const d of ctx.config.docs) out.push(`- ${d.path} — ${d.when}`);
   }
-  out.push("", testsHowTo(ctx, "coder"));
+  out.push("", testsHowTo(ctx, Role.enum.coder));
   out.push("", "Do not commit, push, stash or switch branches. The user reviews and commits.");
   if (run.iteration > 1) {
-    const prev = submittedRuns(s, "coder").at(-1);
+    const prev = submittedRuns(s, Role.enum.coder).at(-1);
     if (prev) out.push(`This is iteration ${run.iteration}; your previous submission was ${prev.id}.`);
   }
 }
 
 function reviewerSection(ctx: Ctx, s: TaskState, run: ReviewerRun, h: H, out: string[]): void {
   h("Your job");
-  if (run.target === "tests") {
+  if (run.target === ReviewTarget.enum.tests) {
     const tester = latestSubmittedTester(s);
     out.push(
       "Review the TESTS written from the requirements. No implementation exists yet — that's expected.",
@@ -225,7 +226,7 @@ function reviewerSection(ctx: Ctx, s: TaskState, run: ReviewerRun, h: H, out: st
       notesToVerify(s, tester, h, out);
     }
   } else {
-    const coder = submittedRuns(s, "coder").at(-1);
+    const coder = submittedRuns(s, Role.enum.coder).at(-1);
     out.push(
       "Review the IMPLEMENTATION against the requirements, the plan and the tests.",
       s.git.baseRef
@@ -235,7 +236,7 @@ function reviewerSection(ctx: Ctx, s: TaskState, run: ReviewerRun, h: H, out: st
     if (s.git.dirtyAtStart) {
       out.push("Note: the working tree already had uncommitted changes when the task started — separate them using the coder's filesChanged list.");
     }
-    if (coder?.role === "coder" && coder.output) {
+    if (coder?.role === Role.enum.coder && coder.output) {
       h(`Coder's report (run ${coder.id})`);
       out.push(coder.output.summary);
       for (const f of coder.output.filesChanged) out.push(`- ${f.change}: ${f.path} — ${f.why}`);
@@ -249,7 +250,7 @@ function reviewerSection(ctx: Ctx, s: TaskState, run: ReviewerRun, h: H, out: st
       notesToVerify(s, coder, h, out);
     }
   }
-  out.push("", testsHowTo(ctx, "reviewer"));
+  out.push("", testsHowTo(ctx, Role.enum.reviewer));
   h("Severity rules");
   out.push(
     "- blocker: wrong behavior vs requirements, data loss, security hole, crash, broken build/tests.",
@@ -292,13 +293,24 @@ function notesToVerify(s: TaskState, reviewed: Run, h: H, out: string[]): void {
 const LINE_HINT =
   "Line numbers are hints from the time of the review — the code may have changed since. Locate by file + symbol (in parentheses) and the message.";
 
+/** The gates `aw <role> submit` runs: after the tester's tests, after the coder's code; none for the reviewer. */
+function gatesAfterSubmit(ctx: Ctx, role: Role): Gate[] {
+  if (role === Role.enum.tester) return ctx.config.gates.afterTests;
+  if (role === Role.enum.coder) return ctx.config.gates.afterCoding;
+  return [];
+}
+
+/** Open blocking findings the role must fix: the tester's on the tests, the coder's on the code; none for the reviewer. */
+function findingsToFix(s: TaskState, role: Role): StoredFinding[] {
+  if (role === Role.enum.tester) return openBlockingFindings(s, ReviewTarget.enum.tests);
+  if (role === Role.enum.coder) return openBlockingFindings(s, ReviewTarget.enum.code);
+  return [];
+}
+
 function mustAddress(s: TaskState, run: Run, h: H, out: string[]): void {
-  const findings =
-    run.role === "tester" ? openBlockingFindings(s, "tests")
-    : run.role === "coder" ? openBlockingFindings(s, "code")
-    : [];
+  const findings = findingsToFix(s, run.role);
   const notes = s.notes.filter((n) => run.consumedNotes.includes(n.id));
-  if (run.role === "reviewer") {
+  if (run.role === Role.enum.reviewer) {
     const open = openBlockingFindings(s, (run as ReviewerRun).target);
     if (open.length) {
       h("Verify previous findings (give each a status in `previousFindings`)");

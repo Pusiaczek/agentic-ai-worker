@@ -56,9 +56,13 @@ export const RefinementRevision = z.object({
 });
 export type RefinementRevision = z.infer<typeof RefinementRevision>;
 
+/** The product owner works on the run (active), or it ended: submitted (proposal accepted) or abandoned (reset, cancel). */
+export const RefinementRunState = z.enum(["active", "submitted", "abandoned"]);
+export type RefinementRunState = z.infer<typeof RefinementRunState>;
+
 export const RefinementRun = z.object({
   id: RunId,
-  state: z.enum(["active", "submitted", "abandoned"]),
+  state: RefinementRunState,
   startedAt: Iso,
   finishedAt: Iso.optional(),
   agentId: z.string().optional(),
@@ -82,18 +86,38 @@ export type RefinementNote = z.infer<typeof RefinementNote>;
 export const RefinementActor = z.enum(["user", "scrum-master", "product-owner", "hook"]);
 export type RefinementActor = z.infer<typeof RefinementActor>;
 
+/** What the refinement history records (addRefinementEvent in src/core/refinementMachine.ts). */
+export const RefinementEventName = z.enum([
+  "refinement_created",
+  "agent_started",
+  "agent_spawned",
+  "stop_blocked",
+  "agent_stopped_without_submit",
+  "proposal_submitted",
+  "note_added",
+  "agent_reset",
+  "approved",
+  "cancelled",
+]);
+export type RefinementEventName = z.infer<typeof RefinementEventName>;
+
 export const RefinementEvent = z.object({
   at: Iso,
   by: RefinementActor,
+  /** Written as a RefinementEventName. Read as any string, so files with event names from older versions still load. */
   event: z.string(),
   note: z.string().optional(),
 });
+
+/** Where the slice description came from: typed in the conversation, or a file. */
+export const RefinementSourceKind = z.enum(["manual", "file"]);
+export type RefinementSourceKind = z.infer<typeof RefinementSourceKind>;
 
 export const RefinementState = z.object({
   schemaVersion: z.literal(1),
   id: RefinementId,
   title: z.string().min(1),
-  source: z.object({ kind: z.enum(["manual", "file"]), ref: z.string().optional() }),
+  source: z.object({ kind: RefinementSourceKind, ref: z.string().optional() }),
   status: RefinementStatus,
   createdAt: Iso,
   updatedAt: Iso,

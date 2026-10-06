@@ -202,10 +202,24 @@ describe("product owner guards", () => {
     const dir = makeProject();
     toWorkingRefinement(dir);
 
-    expect(productOwnerRuns(dir, "aw refine submit")).toBeNull();
-    expect(productOwnerRuns(dir, 'node "C:/plugins/aw/cli/aw.mjs" refine submit 2>&1')).toBeNull();
-    expect(productOwnerRuns(dir, "aw schema refine")).toBeNull();
-    const notAllowed = ["ls", `aw refine approve ${SLICE}`, "npm test", 'python -c "aw refine submit"', "aw refine submit > out.txt"];
+    const allowed = [
+      "aw refine submit",
+      "aw   schema refine",
+      'node "C:/plugins/aw/cli/aw.mjs" refine submit 2>&1',
+      "node 'C:/plugins/aw/cli/aw.mjs' schema refine",
+      "C:/plugins/aw/bin/aw.cmd refine submit",
+    ];
+    for (const command of allowed) expect(productOwnerRuns(dir, command)).toBeNull();
+    const notAllowed = [
+      "ls",
+      `aw refine approve ${SLICE}`,
+      "npm test",
+      'python -c "aw refine submit"',
+      "aw refine submit > out.txt",
+      "aw refine submit --force",
+      "node evil.mjs refine submit",
+      "aw refine submit && rm -rf src",
+    ];
     for (const command of notAllowed) expect(productOwnerRuns(dir, command)).toBe("deny");
   });
 

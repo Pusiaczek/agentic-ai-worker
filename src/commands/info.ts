@@ -6,15 +6,16 @@ import { readRoleNotes } from "../core/briefing";
 import { isIgnored } from "../core/git";
 import { describeFinding, openBlockingFindings, pendingNotes } from "../core/machine";
 import { formatNext, nextAction } from "../core/next";
-import { directTestCommandsBlocked } from "../core/tests";
 import { type Ctx, findRoot, loadCtx, rel } from "../core/project";
 import { findActiveTask, parseStateText, readBacklog, readState, STATE_FILE, writeBacklog } from "../core/store";
+import { directTestCommandsBlocked } from "../core/tests";
 import type { Io } from "../io";
+import { BacklogAction } from "../schema/commands";
 import { Config, CONFIG_FILE } from "../schema/config";
 import { EXAMPLES } from "../schema/examples";
 import { INPUT_SCHEMAS, type InputSchemaName } from "../schema/outputs";
-import { BacklogItem, type TaskState, TaskState as TaskStateSchema } from "../schema/state";
-import { Role } from "../schema/status";
+import { BacklogItem, BacklogStatus, RunState, type TaskState, TaskState as TaskStateSchema } from "../schema/state";
+import { Role, Status } from "../schema/status";
 import { bool, parseArgs, str } from "../util/args";
 import { AwError, EXIT } from "../util/errors";
 import { nowIso, readTextIfExists } from "../util/fsx";
@@ -64,8 +65,8 @@ export function showCommand(argv: string[], io: Io): number {
   if (s.runs.length) {
     io.out("\nRuns:");
     for (const r of s.runs) {
-      const what = r.role === "reviewer" ? `reviewer/${r.target}` : r.role;
-      const verdict = r.role === "reviewer" && r.output ? ` → ${r.output.verdict}` : "";
+      const what = r.role === Role.enum.reviewer ? `reviewer/${r.target}` : r.role;
+      const verdict = r.role === Role.enum.reviewer && r.output ? ` → ${r.output.verdict}` : "";
       const rejects = r.submitAttempts.filter((a) => !a.ok).length;
       io.out(`  ${r.id} ${what} #${r.iteration} ${r.state}${verdict}${rejects ? ` (${rejects} rejected submit(s))` : ""}`);
       if (r.output) io.out(`      ${r.output.summary.split("\n")[0]}`);
@@ -82,7 +83,7 @@ export function showCommand(argv: string[], io: Io): number {
     const notes = pendingNotes(s, role);
     if (notes.length) io.out(`\nPending notes for ${role}: ${notes.map((n) => `${n.id} ${n.text}`).join(" | ")}`);
   }
-  const followUps = s.runs.flatMap((r) => (r.role === "reviewer" && r.output ? r.output.followUps.map((f) => f.text) : []));
+  const followUps = s.runs.flatMap((r) => (r.role === Role.enum.reviewer && r.output ? r.output.followUps.map((f) => f.text) : []));
   if (followUps.length) io.out(`\nFollow-ups:\n${followUps.map((f) => `  - ${f}`).join("\n")}`);
   const questions = s.runs.flatMap((r) => r.output?.openQuestions.map((q) => `${r.id}: ${q}`) ?? []);
   if (questions.length) io.out(`\nOpen questions:\n${questions.map((q) => `  - ${q}`).join("\n")}`);
@@ -98,13 +99,19 @@ export function showCommand(argv: string[], io: Io): number {
 
 const SCHEMA_NAMES = [...Object.keys(INPUT_SCHEMAS), "config", "state"];
 
+/** What `aw schema <name>` prints: the repo config, the task state, or an agent's or the orchestrator's input. */
+function schemaByName(name: string): z.ZodType {
+  if (name === "config") return Config;
+  if (name === "state") return TaskStateSchema;
+  return INPUT_SCHEMAS[name as InputSchemaName];
+}
+
 export function schemaCommand(argv: string[], io: Io): number {
   const name = argv[0];
   if (!name || !SCHEMA_NAMES.includes(name)) {
     throw new AwError(`Usage: aw schema <${SCHEMA_NAMES.join("|")}>`, EXIT.USAGE);
   }
-  const schema = name === "config" ? Config : name === "state" ? TaskStateSchema : INPUT_SCHEMAS[name as InputSchemaName];
-  const json = z.toJSONSchema(schema, { io: name === "state" ? "output" : "input", unrepresentable: "any" });
+  const json = z.toJSONSchema(schemaByName(name), { io: name === "state" ? "output" : "input", unrepresentable: "any" });
   io.out(`JSON Schema for ${name}${name in INPUT_SCHEMAS ? " (fields with defaults may be omitted; unknown fields are rejected)" : ""}:`);
   io.out(JSON.stringify(json, null, 2));
   const example = EXAMPLES[name as InputSchemaName];
@@ -121,7 +128,7 @@ export function backlogCommand(argv: string[], io: Io): number {
   const ctx = loadCtx(io.cwd);
   const args = parseArgs(argv, ["all", "json"]);
   const backlog = readBacklog(ctx);
-  if (args.positionals[0] === "set") {
+  if (args.positionals[0] === BacklogAction.enum.set) {
     const [, id, status] = args.positionals;
     const parsedStatus = BacklogItem.shape.status.safeParse(status);
     if (!id || !parsedStatus.success) {
@@ -138,7 +145,7 @@ export function backlogCommand(argv: string[], io: Io): number {
     return EXIT.OK;
   }
   const kind = str(args, "kind");
-  const items = backlog.items.filter((i) => (bool(args, "all") || i.status === "open") && (!kind || i.kind === kind));
+  const items = backlog.items.filter((i) => (bool(args, "all") || i.status === BacklogStatus.enum.open) && (!kind || i.kind === kind));
   if (bool(args, "json")) {
     io.out(JSON.stringify(items, null, 2));
     return EXIT.OK;
@@ -171,7 +178,7 @@ export function statsCommand(_argv: string[], io: Io): number {
     return EXIT.OK;
   }
   const avg = (xs: number[]) => (xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : "—");
-  const count = (s: TaskState, role: Role) => s.runs.filter((r) => r.role === role && r.state === "submitted").length;
+  const count = (s: TaskState, role: Role) => s.runs.filter((r) => r.role === role && r.state === RunState.enum.submitted).length;
   const tally = new Map<string, number>();
   const bump = (k: string) => tally.set(k, (tally.get(k) ?? 0) + 1);
   let rejected = 0;
@@ -187,14 +194,16 @@ export function statsCommand(_argv: string[], io: Io): number {
       t.runs += r.testRuns.length;
       t.ms += r.testRuns.reduce((sum, x) => sum + x.durationMs, 0);
       testTime.set(r.role, t);
-      if (r.role === "reviewer" && r.output) for (const f of r.output.findings) bump(`${f.severity} · ${f.category}`);
+      if (r.role === Role.enum.reviewer && r.output) for (const f of r.output.findings) bump(`${f.severity} · ${f.category}`);
       for (const n of r.output?.processNotes ?? []) notes.push(`${s.id} ${r.role}: ${n}`);
     }
-    for (const h of s.history) if (h.type === "transition" && h.to === "BLOCKED") blocks.push(`${s.id}: ${h.note ?? ""}`);
+    for (const h of s.history) if (h.type === "transition" && h.to === Status.enum.BLOCKED) blocks.push(`${s.id}: ${h.note ?? ""}`);
   }
-  const done = tasks.filter((t) => t.status === "DONE");
+  const done = tasks.filter((t) => t.status === Status.enum.DONE);
   io.out(`Archived tasks: ${tasks.length} (done ${done.length}, cancelled ${tasks.length - done.length})`);
-  io.out(`Avg iterations per task — tests: ${avg(tasks.map((t) => count(t, "tester")))}, code: ${avg(tasks.map((t) => count(t, "coder")))}`);
+  const testIterations = avg(tasks.map((t) => count(t, Role.enum.tester)));
+  const codeIterations = avg(tasks.map((t) => count(t, Role.enum.coder)));
+  io.out(`Avg iterations per task — tests: ${testIterations}, code: ${codeIterations}`);
   io.out(`Avg plan revisions: ${avg(tasks.map((t) => t.plans.length))}`);
   io.out(`Rejected submissions: ${rejected} · agents stopped before submitting: ${stopBlocks}`);
   const testLines = [...testTime.entries()]

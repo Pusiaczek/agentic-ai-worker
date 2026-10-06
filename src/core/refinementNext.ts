@@ -1,6 +1,6 @@
 /** `aw refine next`: what the orchestrator (the /aw:refine skill) does next for a refinement. Read-only. */
 import * as path from "node:path";
-import type { RefinementState } from "../schema/refinement";
+import { type RefinementState, RefinementStatus } from "../schema/refinement";
 import { readTextIfExists } from "../util/fsx";
 import { type Ctx, rel } from "./project";
 import { activeRefinementRun, latestRevision, pendingRefinementNotes, writtenInput } from "./refinementMachine";
@@ -35,7 +35,7 @@ export function chooseAction(inProgress: { ref: RefinementRef; state: Refinement
 export function refinementNextAction(ctx: Ctx, ref: RefinementRef, s: RefinementState): RefinementNextAction {
   const paths = refinementPaths(ref);
   switch (s.status) {
-    case "DRAFT": {
+    case RefinementStatus.enum.DRAFT: {
       if (!writtenInput(readTextIfExists(paths.input))) {
         return {
           kind: "write-input",
@@ -54,7 +54,7 @@ export function refinementNextAction(ctx: Ctx, ref: RefinementRef, s: Refinement
         ],
       };
     }
-    case "WORKING": {
+    case RefinementStatus.enum.WORKING: {
       const run = activeRefinementRun(s);
       return {
         kind: "recover-agent",
@@ -64,7 +64,7 @@ export function refinementNextAction(ctx: Ctx, ref: RefinementRef, s: Refinement
         ],
       };
     }
-    case "PROPOSED": {
+    case RefinementStatus.enum.PROPOSED: {
       const revision = latestRevision(s);
       return {
         kind: "user-review",
@@ -77,7 +77,7 @@ export function refinementNextAction(ctx: Ctx, ref: RefinementRef, s: Refinement
         ],
       };
     }
-    case "APPROVED": {
+    case RefinementStatus.enum.APPROVED: {
       const revision = s.revisions.find((candidate) => candidate.revision === s.approvedRevision);
       return {
         kind: "done",
@@ -87,7 +87,7 @@ export function refinementNextAction(ctx: Ctx, ref: RefinementRef, s: Refinement
         ],
       };
     }
-    case "CANCELLED":
+    case RefinementStatus.enum.CANCELLED:
       return { kind: "cancelled", lines: ["The refinement was cancelled. Nothing to do."] };
   }
 }

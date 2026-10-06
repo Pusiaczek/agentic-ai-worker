@@ -1,12 +1,15 @@
 /** Operations and read helpers over RefinementState. Pure: no I/O. */
+import type { RefineAction } from "../schema/commands";
 import type { RefineOutput } from "../schema/outputs";
-import type {
-  RefinementActor,
-  RefinementNote,
-  RefinementRevision,
-  RefinementRun,
-  RefinementState,
-  RefinementStatus,
+import {
+  type RefinementActor,
+  type RefinementEventName,
+  type RefinementNote,
+  type RefinementRevision,
+  type RefinementRun,
+  RefinementRunState,
+  type RefinementState,
+  type RefinementStatus,
 } from "../schema/refinement";
 import { AwError, EXIT } from "../util/errors";
 import { nowIso } from "../util/fsx";
@@ -19,7 +22,7 @@ export function writtenInput(text: string | null): string {
   return (text ?? "").replace(/<!--[\s\S]*?-->/g, "").trim();
 }
 
-export function addRefinementEvent(s: RefinementState, by: RefinementActor, event: string, note?: string): void {
+export function addRefinementEvent(s: RefinementState, by: RefinementActor, event: RefinementEventName, note?: string): void {
   s.history.push({ at: nowIso(), by, event, ...(note ? { note } : {}) });
 }
 
@@ -29,7 +32,7 @@ export function nextRefinementId(s: RefinementState, counter: keyof RefinementSt
 }
 
 /** Refuses the action unless the refinement is in one of the `allowed` statuses. */
-export function requireStatus(s: RefinementState, allowed: readonly RefinementStatus[], action: string): void {
+export function requireStatus(s: RefinementState, allowed: readonly RefinementStatus[], action: RefineAction): void {
   if (!allowed.includes(s.status)) {
     throw new AwError(
       `Refinement ${s.id} is ${s.status}; "${action}" needs ${allowed.join(" or ")}.`,
@@ -40,7 +43,7 @@ export function requireStatus(s: RefinementState, allowed: readonly RefinementSt
 }
 
 export function activeRefinementRun(s: RefinementState): RefinementRun | undefined {
-  return s.runs.find((run) => run.state === "active");
+  return s.runs.find((run) => run.state === RefinementRunState.enum.active);
 }
 
 /** Notes no run has taken yet: the next product-owner run must answer them. */
@@ -56,7 +59,7 @@ export function latestRevision(s: RefinementState): RefinementRevision | undefin
 export function abandonActiveRun(s: RefinementState, reason: string): void {
   const run = activeRefinementRun(s);
   if (!run) return;
-  run.state = "abandoned";
+  run.state = RefinementRunState.enum.abandoned;
   run.finishedAt = nowIso();
   run.abandonReason = reason;
   for (const note of s.notes) if (note.consumedByRun === run.id) delete note.consumedByRun;

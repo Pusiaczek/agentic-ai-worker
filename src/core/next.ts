@@ -2,8 +2,9 @@
  * `aw sm next`: the single place that decides what the orchestrator does next.
  * The scrum-master skill follows this output instead of reasoning about the state machine itself.
  */
-import type { Run, TaskState } from "../schema/state";
-import { type Role, roleForStatus } from "../schema/status";
+import { ResumePolicy } from "../schema/config";
+import { NoteSource, type Run, type TaskState } from "../schema/state";
+import { type Role, roleForStatus, Status } from "../schema/status";
 import { activeRun, latestRun, pendingNotes } from "./machine";
 import type { Ctx } from "./project";
 
@@ -35,12 +36,20 @@ export function recoverMessage(run: Run): string {
   return `You stopped without finishing the aw protocol for run ${run.id}. Run \`aw ${run.role} submit\` (fix any errors it reports) or \`aw ${run.role} fail --reason "<why>"\`. Then reply with one line.`;
 }
 
+/**
+ * Whether the role's next iteration continues the previous agent (agents.<role>.resume):
+ * always, never, or only when a dispute about the tests was resolved for this role ("on-dispute").
+ */
+function shouldResume(policy: ResumePolicy, s: TaskState, role: Role): boolean {
+  if (policy === ResumePolicy.enum.always) return true;
+  if (policy === ResumePolicy.enum["on-dispute"]) return pendingNotes(s, role).some((note) => note.source === NoteSource.enum.dispute);
+  return false;
+}
+
 function spawn(ctx: Ctx, s: TaskState, role: Role): NextAction {
-  const policy = ctx.config.agents[role].resume;
   const agentId = latestRun(s, role)?.agentId ?? s.lastSpawn[role]?.agentId;
-  const resume =
-    !!agentId &&
-    (policy === "always" || (policy === "on-dispute" && pendingNotes(s, role).some((n) => n.source === "dispute")));
+  const policy = ctx.config.agents[role].resume;
+  const resume = !!agentId && shouldResume(policy, s, role);
   return {
     kind: "spawn-agent",
     lines: [
@@ -81,7 +90,7 @@ export function nextAction(ctx: Ctx, s: TaskState | null): NextAction {
     };
   }
   switch (s.status) {
-    case "PLANNING":
+    case Status.enum.PLANNING:
       return {
         kind: "plan",
         lines: [
@@ -89,7 +98,7 @@ export function nextAction(ctx: Ctx, s: TaskState | null): NextAction {
           "2. Research the code and docs, draft the plan JSON (`aw schema plan`), then `aw sm plan --file <plan.json>`.",
         ],
       };
-    case "AWAITING_APPROVAL":
+    case Status.enum.AWAITING_APPROVAL:
       return {
         kind: "user-approval",
         lines: [
@@ -97,7 +106,7 @@ export function nextAction(ctx: Ctx, s: TaskState | null): NextAction {
           "Approved → `aw sm approve` (the user confirms the command). Changes → revise the JSON and `aw sm plan --file` again.",
         ],
       };
-    case "DOCS_CHECK":
+    case Status.enum.DOCS_CHECK:
       return {
         kind: "docs-check",
         lines: [
@@ -106,7 +115,7 @@ export function nextAction(ctx: Ctx, s: TaskState | null): NextAction {
           ...ctx.config.docs.map((d) => `- ${d.path} — ${d.when}`),
         ],
       };
-    case "AWAITING_ACCEPTANCE":
+    case Status.enum.AWAITING_ACCEPTANCE:
       return {
         kind: "user-acceptance",
         lines: [
@@ -115,7 +124,7 @@ export function nextAction(ctx: Ctx, s: TaskState | null): NextAction {
           'Changes wanted → one note per remark: `aw sm note --for coder|tester --text "<remark>"`, then `aw sm reopen --to READY_FOR_CODING|READY_FOR_TESTS|PLANNING --note "<one-line summary>"`.',
         ],
       };
-    case "BLOCKED":
+    case Status.enum.BLOCKED:
       return {
         kind: "resolve-block",
         lines: [
@@ -124,8 +133,8 @@ export function nextAction(ctx: Ctx, s: TaskState | null): NextAction {
           '`aw sm unblock --to <STATUS> --note "<decision>"` (the note goes to the agent that works next), or `aw sm cancel --reason "<why>"`.',
         ],
       };
-    case "DONE":
-    case "CANCELLED":
+    case Status.enum.DONE:
+    case Status.enum.CANCELLED:
       return {
         kind: "archive",
         lines: ["Write a short retro JSON (`aw schema retro`), then `aw sm archive --retro <retro.json>`."],
