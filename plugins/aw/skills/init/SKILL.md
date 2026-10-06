@@ -15,6 +15,11 @@ Arguments: `$ARGUMENTS`
 
 ## Steps
 
+0. **Empty directory?** If there is no project yet (no `package.json` or other manifest, no source), set one up first, asking before every side effect:
+   - ask about the stack with concrete options (AskUserQuestion), e.g. language and runtime, framework, database and ORM, test runner, linter;
+   - ask before `git init`; aw works best with git, because reviewers diff against the task's base commit;
+   - scaffold only what the user agreed to, install dependencies, and check that the test command runs;
+   - then continue with step 1, so `aw init` detects the real commands and gates.
 1. **Scaffold.** Run `aw init $ARGUMENTS` from the repository root. It detects the package manager, scripts and test runner, then writes:
    - `.claude/aw.config.json` and its schema,
    - role-note templates in `.claude/aw/`.

@@ -23049,7 +23049,7 @@ function buildBriefing(ctx, ref, s, run2) {
   h("Read first");
   out.push(
     `- Requirements (the task as given, verbatim): ${rel(ctx, p.requirements)}`,
-    `- Plan (revision ${plan?.revision ?? "?"}, approved): ${rel(ctx, p.plan)}`,
+    `- Plan (revision ${plan?.revision ?? "?"}, approved): ${rel(ctx, p.plan)} \u2014 ${planReadingHint(run2.role)}`,
     "- Project instructions (CLAUDE.md) are already in your context; follow them."
   );
   if (plan?.relevantDocs.length) {
@@ -23078,6 +23078,10 @@ function buildBriefing(ctx, ref, s, run2) {
     `4. Final reply: ONE line, e.g. \`${run2.role} ${run2.id}: submitted \u2014 <\u226415 words>\`. Details belong in the JSON, not in the reply.`
   );
   return out.join("\n");
+}
+function planReadingHint(role) {
+  if (role === "reviewer") return "the acceptance criteria are below; read the contract, out-of-scope items and risks there.";
+  return "the acceptance criteria and the parts of the plan you need are below; open it only for the summary, out-of-scope items and risks.";
 }
 function testerSection(ctx, s, run2, h, out) {
   const plan = currentPlan(s);
@@ -23151,7 +23155,8 @@ function reviewerSection(ctx, s, run2, h, out) {
     out.push(
       "Review the TESTS written from the requirements. No implementation exists yet \u2014 that's expected.",
       "Check: every criterion really verified (not just mentioned); edge cases and error paths; tests assert behavior through the contract, not internals;",
-      "would an obviously wrong implementation still pass?; test independence and determinism; repo test conventions; nothing outside test files."
+      "would an obviously wrong implementation still pass?; test independence and determinism; repo test conventions; nothing outside test files;",
+      "a rule shared by several endpoints or functions tested in full only once (elsewhere one representative case), not as a duplicated matrix."
     );
     if (tester?.output) {
       h(`Tests to review (tester run ${tester.id})`);

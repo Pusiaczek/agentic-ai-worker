@@ -155,7 +155,7 @@ Wszystkie pola mają wartości domyślne (`aw schema config` wypisze pełny sche
 
 Coder, tester i reviewer dostają w briefingu sekcję „Code standards”, złożoną z dwóch warstw:
 
-1. **Domyślne standardy aw:** [plugins/aw/templates/code-standards.md](plugins/aw/templates/code-standards.md). To opisowe nazwy, żadnych zagnieżdżonych ternary, nazwane funkcje dla nieoczywistych warunków, wspólne typy zamiast literałów i brak `any` (także w testach). Zmieniasz je w jednym miejscu i działają we wszystkich repo.
+1. **Domyślne standardy aw:** [plugins/aw/templates/code-standards.md](plugins/aw/templates/code-standards.md). To opisowe nazwy, żadnych zagnieżdżonych ternary, nazwane funkcje dla nieoczywistych warunków, wspólne typy zamiast literałów (zbiory znanych wartości jako `as const` i typ unii), brak `any` (także w testach), jedno zadanie na plik, komentarz przy obejściu biblioteki (dlaczego i przy jakim założeniu) oraz obsługa tylko tych błędów, które da się rozpoznać. Zmieniasz je w jednym miejscu i działają we wszystkich repo.
 2. **Reguły danego repo:** `.claude/aw/code-standards.md` (szablon tworzy `aw init`). Dochodzą po domyślnych i wygrywają przy konflikcie.
 
 Reviewer sprawdza je w kodzie i testach. Naruszenie to zwykle uwaga `minor`, a `major`, gdy zaciemnia ważną logikę albo łamie jawną regułę repo. W repo, które przeszło `aw init` przed dodaniem tej funkcji, wystarczy uruchomić `aw init` ponownie: config i notatki zostaną, a brakujący szablon się doda.

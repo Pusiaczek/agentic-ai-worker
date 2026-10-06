@@ -29,6 +29,7 @@ Tell the user where things stand in one short line whenever the status changes, 
 ### intake: no active task
 - Get the task text: from the arguments (text or a file path), or ask the user. Read `.claude/aw/scrum-master.md` for this repo's rules on where tasks come from.
 - If the task references a Jira issue and a Jira/Atlassian MCP tool is available: fetch the issue, its parent/epic, linked issues and comments. Everything goes into requirements.md verbatim, under headings per source.
+- **Check the working tree first:** `git status --short`. `aw sm new` records the current commit as the task's base, so uncommitted changes would mix into every reviewer's diff and can't be separated later. If anything is listed, show it and ask (AskUserQuestion): "I'll commit or stash them myself, then continue" / "Continue anyway (they'll show up in the task's diff)" / "Stop". Never commit or stash yourself; git history is the user's.
 - `aw sm new --title "<short title>" [--id <ticket id>] [--mode tdd|light] [--requirements <file>]`
 - If you didn't pass `--requirements`, write the task text into the printed requirements.md **verbatim**. Never summarize it; it's the record of what was asked.
 
@@ -37,14 +38,15 @@ Tell the user where things stand in one short line whenever the status changes, 
 2. **Choose the mode.**
    - `tdd` (default) is for features and bug fixes with observable behavior. For a bug, the first test reproduces it. For a refactor with weak coverage, tests pin the current behavior first.
    - `light` is for small, low-risk changes: config, copy, a few lines. The coder writes the tests too.
-3. Draft the plan JSON (`aw schema plan` prints the schema and an example). Save it as `plan.json` next to requirements.md.
-   - `acceptanceCriteria`: specific and testable, one behavior each, including the error cases. The CLI numbers them AC-1… in order.
+3. **Too big? Propose a split.** If the task needs more than about 10 acceptance criteria, propose splitting it into smaller tasks that each work on their own (e.g. a users CRUD → create + get / list / update / delete) and ask the user. Smaller tasks mean shorter agent runs, cheaper iterations and easier reviews. If they agree, plan only the first part now and list the other parts in `outOfScope`, so they're recorded for the next tasks.
+4. Draft the plan JSON (`aw schema plan` prints the schema and an example). Save it as `plan.json` next to requirements.md, with the Write tool (see Rules).
+   - `acceptanceCriteria`: specific and testable, one behavior each, including the error cases. Describe observable behavior ("a second active user with the same email is rejected, also by the database"), not where or how it's built ("defined in src/db/schema.ts"); locations belong in the contract. The CLI numbers them AC-1… in order.
    - `contract` is **required in tdd**, because the tester writes tests against it before code exists. Include module paths, exported function signatures, endpoints, request/response and error shapes.
    - `approach`: concrete steps. `relevantDocs`: path plus why. Add `outOfScope` and `risks` too.
-4. `aw sm plan --file <plan.json>`. If the CLI reports errors, fix the JSON and rerun.
+5. `aw sm plan --file <plan.json>`. If the CLI reports errors, fix the JSON and rerun.
 
 ### user-approval
-Show the user the plan: summary, acceptance criteria, contract, mode, anything you're unsure about. Ask for approval and **wait for an explicit yes in this conversation**.
+Show the user the plan: summary, acceptance criteria, contract, mode, anything you're unsure about. Ask with AskUserQuestion ("Approve" / "Changes" / "Cancel the task") and **wait for an explicit choice in this conversation**.
 - Approved: run `aw sm approve`. The user confirms this command in a permission prompt, so the approval is recorded as theirs.
 - Changes: edit the JSON, then `aw sm plan --file` again (a new revision), and present it again.
 
@@ -68,7 +70,7 @@ Give the user a compact summary (`aw show`):
 - open questions,
 - follow-ups.
 
-Ask them to review the diff.
+Ask them to review the diff, then ask with AskUserQuestion ("Accept" / "Changes"; the remarks come as free text).
 - Accepted: run `aw sm accept`. The user confirms the prompt.
 - Changes wanted: split the user's feedback into separate remarks and queue **one note per remark** for the role that must act, e.g. `aw sm note --for coder --text "<remark, in the user's words plus file/line if given>"`. Each note gets an ID; the agent must answer every note separately, and the next reviewer checks the answers. Then run `aw sm reopen --to READY_FOR_CODING|READY_FOR_TESTS --note "<one-line summary>"`.
 - If the remarks change the requirements or the plan, reopen `--to PLANNING` and put them into a revised plan instead.
@@ -79,7 +81,7 @@ Explain the reason plainly and give a recommendation.
 - **Iteration limit:** summarize what keeps failing (`aw show`).
 - **Agent failure:** the reason from the agent.
 
-The user decides. Then run `aw sm unblock --to <STATUS> --note "<decision>"`. The note reaches the next agent. For example:
+The user decides; offer the options with AskUserQuestion, your recommendation first. Then run `aw sm unblock --to <STATUS> --note "<decision>"`. The note reaches the next agent. For example:
 - `--to READY_FOR_TESTS` when a test must change,
 - `--to READY_FOR_CODING` when the coder must comply,
 - `--to PLANNING` when the plan was wrong.
@@ -93,5 +95,6 @@ Write a short retro JSON (`aw schema retro`): what went well, what went wrong, c
 - Never write `state.json`; never run `aw tester|reviewer|coder …` yourself; never run `aw sm approve` or `aw sm accept` without the user's explicit OK in this conversation.
 - Don't do the agents' work. If an agent is stuck, fix the inputs (plan, notes) instead of the code.
 - Pass user feedback to agents via notes (`aw sm note --for coder --text "…"`), not by editing their files.
+- Write the JSON files you hand to the CLI (plan, docs check, retro) with the Write tool, not with shell heredocs (`cat > file <<EOF`): an unquoted heredoc expands `$…` and backticks in the text, and the Bash guard rejects any command that mentions `state.json` next to a redirect. The CLI validates the content either way.
 - One active task at a time. For an unrelated quick question from the user, just answer it; the task waits.
 - Git history is the user's: don't commit, push or switch branches unless the user asks you directly.

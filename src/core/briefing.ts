@@ -85,7 +85,7 @@ export function buildBriefing(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run): s
   h("Read first");
   out.push(
     `- Requirements (the task as given, verbatim): ${rel(ctx, p.requirements)}`,
-    `- Plan (revision ${plan?.revision ?? "?"}, approved): ${rel(ctx, p.plan)}`,
+    `- Plan (revision ${plan?.revision ?? "?"}, approved): ${rel(ctx, p.plan)} — ${planReadingHint(run.role)}`,
     "- Project instructions (CLAUDE.md) are already in your context; follow them.",
   );
   if (plan?.relevantDocs.length) {
@@ -124,6 +124,16 @@ export function buildBriefing(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run): s
 }
 
 type H = (title: string) => void;
+
+/**
+ * What the agent still needs from plan.md. The tester's and coder's briefings already carry the criteria
+ * and their part of the plan (contract, test strategy, implementation steps), so reading the whole plan
+ * again would only repeat them; the reviewer's briefing carries just the criteria.
+ */
+function planReadingHint(role: Role): string {
+  if (role === "reviewer") return "the acceptance criteria are below; read the contract, out-of-scope items and risks there.";
+  return "the acceptance criteria and the parts of the plan you need are below; open it only for the summary, out-of-scope items and risks.";
+}
 
 function testerSection(ctx: Ctx, s: TaskState, run: Run, h: H, out: string[]): void {
   const plan = currentPlan(s);
@@ -200,7 +210,8 @@ function reviewerSection(ctx: Ctx, s: TaskState, run: ReviewerRun, h: H, out: st
     out.push(
       "Review the TESTS written from the requirements. No implementation exists yet — that's expected.",
       "Check: every criterion really verified (not just mentioned); edge cases and error paths; tests assert behavior through the contract, not internals;",
-      "would an obviously wrong implementation still pass?; test independence and determinism; repo test conventions; nothing outside test files.",
+      "would an obviously wrong implementation still pass?; test independence and determinism; repo test conventions; nothing outside test files;",
+      "a rule shared by several endpoints or functions tested in full only once (elsewhere one representative case), not as a duplicated matrix.",
     );
     if (tester?.output) {
       h(`Tests to review (tester run ${tester.id})`);
