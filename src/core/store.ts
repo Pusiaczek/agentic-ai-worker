@@ -73,6 +73,23 @@ export function parseStateText(text: string, label: string): TaskState {
   return parseSealedText(TaskState, STATE_FILE, text, label);
 }
 
+/** Archived tasks, in archive-directory order, plus the directories whose state can't be read. */
+export function readArchivedTasks(ctx: Ctx): { tasks: TaskState[]; unreadable: string[] } {
+  const directories = fs.existsSync(ctx.archiveDir) ? fs.readdirSync(ctx.archiveDir).sort() : [];
+  const tasks: TaskState[] = [];
+  const unreadable: string[] = [];
+  for (const directory of directories) {
+    const text = readTextIfExists(path.join(ctx.archiveDir, directory, STATE_FILE));
+    if (!text) continue;
+    try {
+      tasks.push(parseStateText(text, directory));
+    } catch {
+      unreadable.push(directory);
+    }
+  }
+  return { tasks, unreadable };
+}
+
 export function readState(ref: TaskRef, opts: { verifyHash?: boolean } = {}): TaskState {
   return readSealed(sealedState(ref), opts);
 }

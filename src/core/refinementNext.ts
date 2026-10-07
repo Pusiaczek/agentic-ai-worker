@@ -3,12 +3,13 @@ import * as path from "node:path";
 import { type RefinementState, RefinementStatus } from "../schema/refinement";
 import { readTextIfExists } from "../util/fsx";
 import { type Ctx, rel } from "./project";
+import { contextDocFiles } from "./refinementContext";
 import { activeRefinementRun, latestRevision, pendingRefinementNotes, writtenInput } from "./refinementMachine";
 import { itemFileName } from "./refinementRender";
 import { refinementPaths, type RefinementRef } from "./refinementStore";
 
 export interface RefinementNextAction {
-  kind: "intake" | "choose" | "write-input" | "spawn-po" | "recover-agent" | "user-review" | "done" | "cancelled";
+  kind: "intake" | "choose" | "write-input" | "set-context" | "spawn-po" | "recover-agent" | "user-review" | "done" | "cancelled";
   lines: string[];
 }
 
@@ -32,6 +33,20 @@ export function chooseAction(inProgress: { ref: RefinementRef; state: Refinement
   };
 }
 
+/** The product owner has no project documentation to read: ask the user where it is, or write it with them. */
+function setContextAction(ctx: Ctx, s: RefinementState): RefinementNextAction {
+  return {
+    kind: "set-context",
+    lines: [
+      `The product owner reads the project documentation in full before every split, but refine.contextDocs (${ctx.config.refine.contextDocs.join(", ")}) matches no files.`,
+      "Ask the user where it is: a directory holding only the documents the product owner should read (product overview, domains, the list of planned slices).",
+      "Then either move the documents there, or set refine.contextDocs in .claude/aw.config.json to globs that match them.",
+      "If the project has no such documentation yet, write a short product overview with the user first: purpose, users, domain terms, planned slices.",
+      `Then run \`aw refine next ${s.id}\`.`,
+    ],
+  };
+}
+
 export function refinementNextAction(ctx: Ctx, ref: RefinementRef, s: RefinementState): RefinementNextAction {
   const paths = refinementPaths(ref);
   switch (s.status) {
@@ -45,6 +60,7 @@ export function refinementNextAction(ctx: Ctx, ref: RefinementRef, s: Refinement
           ],
         };
       }
+      if (!contextDocFiles(ctx).length) return setContextAction(ctx, s);
       const notes = pendingRefinementNotes(s);
       return {
         kind: "spawn-po",

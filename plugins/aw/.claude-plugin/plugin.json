@@ -1,7 +1,7 @@
 {
   "name": "aw",
   "displayName": "Agentic Worker",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Scrum-master orchestrated task pipeline: plan → tests → test review → code → code review → docs → acceptance, with typed, validated state and full traces.",
   "author": { "name": "Filip Bogunia" },
   "keywords": ["workflow", "tdd", "code-review", "orchestration"]

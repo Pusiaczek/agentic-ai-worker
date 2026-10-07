@@ -7,7 +7,8 @@ import { isIgnored } from "../core/git";
 import { describeFinding, openBlockingFindings, pendingNotes } from "../core/machine";
 import { formatNext, nextAction } from "../core/next";
 import { type Ctx, findRoot, loadCtx, rel } from "../core/project";
-import { findActiveTask, parseStateText, readBacklog, readState, STATE_FILE, writeBacklog } from "../core/store";
+import { contextDocFiles } from "../core/refinementContext";
+import { findActiveTask, parseStateText, readArchivedTasks, readBacklog, readState, STATE_FILE, writeBacklog } from "../core/store";
 import { directTestCommandsBlocked } from "../core/tests";
 import type { Io } from "../io";
 import { BacklogAction } from "../schema/commands";
@@ -18,7 +19,7 @@ import { BacklogItem, BacklogStatus, RunState, type TaskState, TaskState as Task
 import { Role, Status } from "../schema/status";
 import { bool, parseArgs, str } from "../util/args";
 import { AwError, EXIT } from "../util/errors";
-import { nowIso, readTextIfExists } from "../util/fsx";
+import { listFiles, nowIso, readTextIfExists } from "../util/fsx";
 import { globMatcher } from "../util/glob";
 
 // ---------------------------------------------------------------- show
@@ -162,17 +163,8 @@ export function backlogCommand(argv: string[], io: Io): number {
 
 export function statsCommand(_argv: string[], io: Io): number {
   const ctx = loadCtx(io.cwd);
-  const dirs = fs.existsSync(ctx.archiveDir) ? fs.readdirSync(ctx.archiveDir) : [];
-  const tasks: TaskState[] = [];
-  for (const d of dirs) {
-    const text = readTextIfExists(path.join(ctx.archiveDir, d, STATE_FILE));
-    if (!text) continue;
-    try {
-      tasks.push(parseStateText(text, d));
-    } catch {
-      io.err(`skipping ${d}: unreadable state`);
-    }
-  }
+  const { tasks, unreadable } = readArchivedTasks(ctx);
+  for (const directory of unreadable) io.err(`skipping ${directory}: unreadable state`);
   if (!tasks.length) {
     io.out("No archived tasks yet.");
     return EXIT.OK;
@@ -219,21 +211,6 @@ export function statsCommand(_argv: string[], io: Io): number {
 
 // ---------------------------------------------------------------- doctor
 
-function listFiles(root: string, limit = 20_000): string[] {
-  const out: string[] = [];
-  const skip = new Set(["node_modules", ".git", "dist", "build", "coverage", ".next", ".turbo"]);
-  const walk = (dir: string, prefix: string) => {
-    if (out.length >= limit) return;
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (out.length >= limit) return;
-      if (e.isDirectory()) {
-        if (!skip.has(e.name)) walk(path.join(dir, e.name), `${prefix}${e.name}/`);
-      } else out.push(`${prefix}${e.name}`);
-    }
-  };
-  walk(root, "");
-  return out;
-}
 
 function scriptOf(command: string): string | null {
   const m = /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?([\w:.-]+)/.exec(command.trim());
@@ -294,6 +271,9 @@ export function doctorCommand(_argv: string[], io: Io): number {
     else ok(`docs: ${d.path}`);
   }
   if (!ctx.config.docs.length) warn("docs index is empty — the docs check will have nothing to compare against");
+  const contextDocs = contextDocFiles(ctx);
+  if (contextDocs.length) ok(`refine.contextDocs: ${contextDocs.length} file(s) the product owner reads before splitting`);
+  else warn(`refine.contextDocs (${ctx.config.refine.contextDocs.join(", ")}) matches no files — /aw:refine will ask for the project documentation`);
 
   for (const name of [...Role.options, "scrum-master", "product-owner"]) {
     const file = path.join(ctx.roleNotesDir, `${name}.md`);

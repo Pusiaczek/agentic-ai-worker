@@ -1,11 +1,19 @@
 /** Text files generated from refinement state: the product owner's briefing, proposal.md, and one file per approved item. */
+import * as path from "node:path";
 import { z } from "zod";
 import { EXAMPLES } from "../schema/examples";
 import { RefineOutput } from "../schema/outputs";
-import type { RefinementItem, RefinementRevision, RefinementRun, RefinementState } from "../schema/refinement";
+import {
+  type RefinementItem,
+  type RefinementRevision,
+  type RefinementRun,
+  type RefinementState,
+  RefinementStatus,
+} from "../schema/refinement";
 import { slugify } from "../util/fsx";
 import { readRoleNotes } from "./briefing";
 import { type Ctx, rel } from "./project";
+import type { PlannedWork } from "./refinementContext";
 import { refinementPaths, type RefinementRef } from "./refinementStore";
 
 const listOrNone = (values: string[]) => (values.length ? values.join(", ") : "none");
@@ -69,7 +77,62 @@ export function renderProposal(s: RefinementState, revision: RefinementRevision)
 }
 
 /** briefing.md: everything the product owner needs for one run. */
-export function renderRefinementBriefing(ctx: Ctx, s: RefinementState, ref: RefinementRef, run: RefinementRun): string {
+/** What the product owner gets besides the slice: see refinementContext.ts. */
+export interface RefinementContext {
+  /** refine.contextDocs files, read in full before splitting. */
+  documentation: string[];
+  work: PlannedWork;
+}
+
+/** Where another refinement stands, in words for the briefing. */
+function refinementProgress(s: RefinementState): string {
+  switch (s.status) {
+    case RefinementStatus.enum.APPROVED:
+      return "approved; its items are tasks to deliver";
+    case RefinementStatus.enum.PROPOSED:
+      return "proposed, waiting for the user's approval";
+    case RefinementStatus.enum.WORKING:
+      return "being split right now";
+    default:
+      return s.revisions.length ? "being revised" : "not split yet";
+  }
+}
+
+/** Items of another refinement: the approved revision, or the latest proposal. */
+function shownRevision(s: RefinementState): RefinementRevision | undefined {
+  if (s.status === RefinementStatus.enum.APPROVED) return s.revisions.find((revision) => revision.revision === s.approvedRevision);
+  return s.revisions.at(-1);
+}
+
+/** Titles and paths only: the product owner reads the details itself when it needs them. */
+function plannedWorkSection(ctx: Ctx, work: PlannedWork): string[] {
+  const out = [
+    "",
+    "## Work already planned or done",
+    "Don't plan it again. Build on it, and keep this slice's items from overlapping it.",
+    "",
+  ];
+  for (const { ref, state } of work.refinements) {
+    out.push(`- Refinement ${state.id} · ${state.title} · ${refinementProgress(state)}`);
+    const approved = state.status === RefinementStatus.enum.APPROVED;
+    for (const item of shownRevision(state)?.items ?? []) {
+      const file = rel(ctx, path.join(refinementPaths(ref).items, itemFileName(item)));
+      out.push(`  - ${item.id} ${item.title}${approved ? ` (${file})` : ""}`);
+    }
+  }
+  if (work.activeTask) out.push(`- Task ${work.activeTask.id} · ${work.activeTask.title} · ${work.activeTask.status} (in progress)`);
+  for (const task of work.archivedTasks) out.push(`- Task ${task.id} · ${task.title} · ${task.status} (archived)`);
+  if (out.length === 4) out.push("Nothing yet: this is the first slice.");
+  return out;
+}
+
+export function renderRefinementBriefing(
+  ctx: Ctx,
+  s: RefinementState,
+  ref: RefinementRef,
+  run: RefinementRun,
+  context: RefinementContext,
+): string {
   const paths = refinementPaths(ref);
   const previous = s.revisions.at(-1);
   const out: string[] = [
@@ -81,11 +144,12 @@ export function renderRefinementBriefing(ctx: Ctx, s: RefinementState, ref: Refi
     "## Your job",
     "Split the slice described in the input file into small, vertical, independently deliverable tasks. Each task will later go through the aw pipeline on its own, planned in detail by the scrum-master.",
     "",
-    `1. Read the slice: ${rel(ctx, paths.input)}`,
-    "2. Explore what you need in the repository with Read, Grep and Glob: the documentation index below, the modules the slice touches, the test layout.",
-    `3. Write your proposal as JSON to ${rel(ctx, paths.proposal)} with the Write tool. It is the only file you may write.`,
-    "4. Run `aw refine submit`. If it reports errors, fix the file and run it again.",
-    `5. Reply with ONE line, e.g. "product-owner ${run.id}: proposed 4 items".`,
+    '1. Read ALL the files under "Project documentation" below: the product, its domains, the planned slices.',
+    `2. Read the slice: ${rel(ctx, paths.input)}`,
+    "3. Explore what you need in the repository with Read, Grep and Glob: the modules the slice touches, the test layout.",
+    `4. Write your proposal as JSON to ${rel(ctx, paths.proposal)} with the Write tool. It is the only file you may write.`,
+    "5. Run `aw refine submit`. If it reports errors, fix the file and run it again.",
+    `6. Reply with ONE line, e.g. "product-owner ${run.id}: proposed 4 items".`,
     "",
     "## Limits",
     `- At most ${ctx.config.refine.maxCriteriaPerItem} acceptance criteria per item: split bigger items.`,
@@ -105,8 +169,14 @@ export function renderRefinementBriefing(ctx: Ctx, s: RefinementState, ref: Refi
       `Full text: ${rel(ctx, paths.proposalView)}. Keep the items the notes don't touch unchanged: same titles and order.`,
     );
   }
+  out.push(
+    "",
+    "## Project documentation (read all of it before splitting)",
+    ...context.documentation.map((file) => `- ${file}`),
+    ...plannedWorkSection(ctx, context.work),
+  );
   if (ctx.config.docs.length) {
-    out.push("", "## Documentation index", ...ctx.config.docs.map((doc) => `- ${doc.path} — ${doc.when}`));
+    out.push("", "## Other documentation (read when relevant)", ...ctx.config.docs.map((doc) => `- ${doc.path} — ${doc.when}`));
   }
   out.push("", "Project instructions (CLAUDE.md) are already in your context.");
   const repositoryNotes = readRoleNotes(ctx, "product-owner");

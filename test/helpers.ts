@@ -250,7 +250,15 @@ export const REFINE_OUT: Proposal = {
 };
 
 /** A refinement of SLICE with the product owner at work (status WORKING). */
+/** Project documentation where refine.contextDocs looks by default; the product owner reads it in full. */
+export const PRODUCT_DOC = "docs/product/overview.md";
+
+export function writeProductDocs(dir: string): void {
+  write(dir, PRODUCT_DOC, "# Demo\nA demo product with users and orders.\n");
+}
+
 export function toWorkingRefinement(dir: string): void {
+  writeProductDocs(dir);
   write(dir, "slice.md", "Users module: create, read and list users.\n");
   expectOk(cli(dir, ["refine", "new", "--title", "Users module", "--id", SLICE, "--input", "slice.md"]));
   expectOk(cli(dir, ["refine", "start-agent", SLICE]));

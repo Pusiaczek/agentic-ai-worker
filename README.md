@@ -103,7 +103,7 @@ Większą funkcjonalność („vertical slice”, epik) najpierw dzielisz na ma�
 ```
 
 1. **Opis.** Skill zapisuje opis dosłownie w `.tasks/refinements/<id>/input.md`.
-2. **Propozycja.** Agent `aw:product-owner` czyta opis i repo, a potem proponuje zadania:
+2. **Propozycja.** Agent `aw:product-owner` czyta najpierw **całą dokumentację projektu**, potem opis slice'a i potrzebny kod. Dokumentacja to domyślnie `docs/product/**/*.md`, a ścieżkę zmieniasz w `refine.contextDocs`. Briefing podaje mu też pracę już zaplanowaną i zrobioną: inne podziały z zadaniami, aktywny task, zarchiwizowane taski. Bez dokumentacji agent nie ruszy, a skill zapyta Cię, gdzie ona jest. Potem agent proponuje zadania:
    - pionowe: każde dostarcza działające zachowanie przez wszystkie potrzebne warstwy;
    - w kolejności dostarczania, z zależnościami;
    - ze szkicem kryteriów akceptacji i sugerowanym trybem (`tdd`/`light`).
@@ -155,7 +155,7 @@ Przy każdym przebiegu zapisana jest ścieżka do pełnego transkryptu agenta (`
 | Stan zmienia tylko CLI | hash w `state.sha256` i `refinement.sha256` (ręczna edycja wykryta przy odczycie), hook blokuje Edit/Write/przekierowania do `state.json` i `refinement.json` |
 | Każda rola woła tylko swoje komendy | hook: coder nie wywoła `aw sm …` ani `aw reviewer …`, główna sesja nie wywoła `aw coder …` |
 | Twoje decyzje są Twoje | hook zwraca `ask` dla `aw sm approve / accept / repair` i `aw refine approve` |
-| Product owner tylko proponuje | hook: zapisuje wyłącznie `proposal.json` podziału, nad którym pracuje, i uruchamia tylko `aw refine submit` / `aw schema refine` |
+| Product owner tylko proponuje | hook: zapisuje wyłącznie `proposal.json` podziału, nad którym pracuje; w Bashu tylko `aw refine submit` / `aw schema refine` i przeszukiwanie tylko do odczytu (`grep`, `find`, `ls`…), bo natywne buildy Claude Code na Linuksie i macOS nie mają narzędzi Glob i Grep |
 | Tester pisze tylko testy, reviewer tylko czyta | hook na Edit/Write: globy testów, tylko plik outputu |
 | Coder nie rusza zatwierdzonych testów | hook plus porównanie hashy przy `submit` (łapie też zmiany zrobione przez Bash) |
 | Kod przechodzi lint/typecheck/testy | bramki uruchamiane przez CLI przy `submit`, więc wynik nie zależy od słowa agenta |
@@ -164,7 +164,7 @@ Przy każdym przebiegu zapisana jest ścieżka do pełnego transkryptu agenta (`
 | Odpowiedź agenta do orkiestratora jest krótka | hook `SubagentStop` jednorazowo odrzuca odpowiedź dłuższą niż `limits.finalMessageMaxChars` |
 | Agenci nie ruszają historii gita | `guards.bashDeny` (push, commit, reset, checkout, stash…) |
 | Agenci aw nic nie zmieniają w repo bez aw | hook: w repo bez `.claude/aw.config.json` blokuje agentom `aw:*` edycje i komendy (poza samym `aw`); Ciebie i innych agentów nie dotyka |
-| Reviewer ma tylko komendy do odczytu | `agents.reviewer.bashAllow` (allowlista prefiksów plus komendy z configu) |
+| Reviewer ma tylko komendy do odczytu | `agents.reviewer.bashAllow` (allowlista prefiksów plus komendy z configu); do tego hook odrzuca przekierowanie do pliku, zagnieżdżone komendy (`$(…)`) i opcje, które zapisują albo uruchamiają programy (`find -delete/-exec`, `git --output`, `tree -o`) |
 
 Coder i tester mają domyślnie `bashAllow: ["*"]`, czyli wszystko poza deny-listą. Kod piszą przez Edit/Write, nie przez Bash, więc allowlista nie blokuje kodowania. Blokuje natomiast uruchamianie rzeczy spoza listy (np. `npm install`, pojedynczy test), dlatego domyślnie jest luźna.
 
@@ -185,7 +185,7 @@ Wszystkie pola mają wartości domyślne (`aw schema config` wypisze pełny sche
 | `guards` | `bashDeny`, `blockMainSessionEditsDuringRuns`, `directTestCommands` (`block`/`allow`), `testCommandPrefixes` |
 | `commands.testFiles` / `testFiltered` | jak `aw test` odpala pliki testów (`{files}`) i filtruje po nazwie (`{pattern}`; bez `testFiltered` dokleja `-t`) |
 | `paths` | `tasksDir`, `archiveDir`, `roleNotesDir` |
-| `refine` | `maxCriteriaPerItem` (domyślnie 8) i `maxItems` (15): limity propozycji product ownera |
+| `refine` | `maxCriteriaPerItem` (domyślnie 8) i `maxItems` (15): limity propozycji product ownera; `contextDocs` (domyślnie `docs/product/**/*.md`): dokumentacja, którą czyta w całości przed każdym podziałem |
 
 ### Standardy kodu
 

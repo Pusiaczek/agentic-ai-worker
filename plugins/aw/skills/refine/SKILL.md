@@ -42,6 +42,13 @@ Several refinements wait for a step. Ask the user which one (AskUserQuestion), t
 ### write-input
 Write the slice description into the printed `input.md` with the Write tool, **verbatim**, as the user or the ticket gave it. Never summarize it: it's the record of what was asked. Then run `aw refine next <id>`.
 
+### set-context
+The product owner reads the project documentation in full before every split, but nothing matches `refine.contextDocs` in `.claude/aw.config.json` (by default `docs/product/**/*.md`).
+- Ask the user where the documentation is: a directory holding only the documents the product owner should read (product overview, domains, the list of planned slices).
+- Point `refine.contextDocs` at it (globs, e.g. `"docs/domains/**/*.md"`). Prefer this to moving the user's files; never move them without asking.
+- If the project has no such documentation yet, write a short product overview with the user into `docs/product/overview.md`: purpose, users, domain terms, planned slices.
+- Then run `aw refine next <id>`.
+
 ### spawn-po
 1. Run `aw refine start-agent <id>`. It starts the product owner's run and prints `AGENT:` and `MESSAGE:`.
 2. Use the Agent tool with:

@@ -47,7 +47,7 @@ import { gitInfo, list, parseInput, readInputJson } from "./shared";
 export const REQUIREMENTS_PLACEHOLDER =
   "<!-- aw: paste the task text here VERBATIM, exactly as the user / ticket gave it. Do not summarize or rephrase. -->\n";
 
-const USAGE = `aw sm <command>
+export const USAGE = `aw sm <command>
   new --title "<t>" [--id <id>] [--mode tdd|light] [--source manual|file|jira] [--ref <r>] [--requirements <file>]
   plan --file <plan.json>          submit / revise the plan (see \`aw schema plan\`)
   approve [--note "<n>"]           user approved the plan (asks the user to confirm)

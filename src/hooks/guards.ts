@@ -6,7 +6,8 @@
  * - agents edit files only during their own active run, and only what their role may touch;
  * - agents run tests only through `aw test` (guards.directTestCommands);
  * - per-role Bash deny/allow lists;
- * - the product owner (refinements) writes only its proposal file and runs only `aw refine submit` / `aw schema refine`;
+ * - the product owner (refinements) writes only its proposal file and runs only `aw refine submit` / `aw schema refine`
+ *   and read-only searches (grep, find, ls…);
  * - `aw refine` belongs to the main session, and `aw refine approve` always asks the user.
  */
 import { activeRun, latestRun } from "../core/machine";
@@ -23,6 +24,7 @@ import { relativeToRoot } from "../util/fsx";
 import { globMatcher } from "../util/glob";
 import { anyOf, inOrder, wholeText, words } from "../util/regex";
 import { type Identity, identify, isAwAgent, isOtherAgent, isProductOwner, isTaskRole } from "./identity";
+import { isReadOnlyCommand, withSingleSpaces } from "./readOnly";
 import { type AwInvocation, findAwInvocations, splitSegments, startsWithCommand, writesStateFile } from "./shell";
 
 export interface HookInput {
@@ -219,15 +221,29 @@ const OPTIONAL_ERRORS_TO_OUTPUT = /(?: 2>&1)?/;
  */
 const PRODUCT_OWNER_COMMAND = wholeText(AW_LAUNCHER, / /, PRODUCT_OWNER_SUBCOMMAND, OPTIONAL_ERRORS_TO_OUTPUT);
 
-/** Collapses runs of whitespace to single spaces, so the patterns above can use plain spaces. */
-const withSingleSpaces = (segment: string) => segment.replace(/\s+/g, " ").trim();
+
+/**
+ * Read-only commands the product owner may use to search the repository. Native Linux and macOS builds of
+ * Claude Code have no Glob and Grep tools; they search through Bash instead (embedded find and grep).
+ */
+const READ_ONLY_SEARCH_COMMANDS = ["grep", "find", "ls", "head", "tail", "wc"];
+
+/**
+ * A search command that only reads (see readOnly.ts).
+ * Allowed: `grep -rn "User" src`, `find src -name "*.ts" 2>/dev/null`, `ls docs`, `head -50 src/app.ts`.
+ * Denied: `find . -delete`, `find . -exec rm {} \;`, `grep x src > out.txt`, `grep x $(rm -rf src)`, `cat a.ts`.
+ */
+function isReadOnlySearch(segment: string): boolean {
+  const commandWord = withSingleSpaces(segment).split(" ")[0] ?? "";
+  return READ_ONLY_SEARCH_COMMANDS.includes(commandWord) && isReadOnlyCommand(segment);
+}
 
 function checkProductOwnerShell(command: string): Decision {
-  const isAllowed = (segment: string) => PRODUCT_OWNER_COMMAND.test(withSingleSpaces(segment));
+  const isAllowed = (segment: string) => PRODUCT_OWNER_COMMAND.test(withSingleSpaces(segment)) || isReadOnlySearch(segment);
   const blocked = splitSegments(command).find((segment) => !isAllowed(segment));
   if (blocked === undefined) return null;
   return deny(
-    `the product owner runs only "aw refine submit" and "aw schema refine" ("${firstWords(blocked)}" is not allowed). Read the repository with Read, Grep and Glob; write only your proposal file.`,
+    `the product owner runs only "aw refine submit", "aw schema refine" and read-only searches (${READ_ONLY_SEARCH_COMMANDS.join(", ")}; no "> file", no $(…), no find -exec/-delete). "${firstWords(blocked)}" is not allowed. Write only your proposal file.`,
   );
 }
 
@@ -251,6 +267,15 @@ function checkShell(ctx: Ctx, who: Identity, command: string): Decision {
   const deniedPrefix = ctx.config.guards.bashDeny.find((prefix) => segments.some((segment) => startsWithCommand(segment, prefix)));
   if (deniedPrefix) {
     return deny(`"${deniedPrefix}" is not allowed for aw agents (guards.bashDeny). The user handles git history and publishing.`);
+  }
+
+  if (who.role === Role.enum.reviewer) {
+    const writing = segments.find((segment) => !isReadOnlyCommand(segment));
+    if (writing) {
+      return deny(
+        `the reviewer is read-only: "${firstWords(writing)}" would write a file or run another program (no "> file", no $(…), no find -exec/-delete, no git --output). Report what you found instead.`,
+      );
+    }
   }
 
   const policy = ctx.config.agents[who.role].bashAllow;

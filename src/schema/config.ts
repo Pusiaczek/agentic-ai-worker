@@ -178,6 +178,12 @@ export const Config = z
           .default(8)
           .describe("Most acceptance criteria one item of a refinement may have; a bigger item must be split."),
         maxItems: z.number().int().positive().default(15).describe("Most items one refinement may have; a bigger slice must be split."),
+        contextDocs: z
+          .array(z.string().min(1))
+          .default(["docs/product/**/*.md"])
+          .describe(
+            "Globs of the project documentation the product owner reads in full before every split: product overview, domains, the list of planned slices.",
+          ),
       })
       .strict()
       .prefault({}),

@@ -178,6 +178,27 @@ describe("subagent lifecycle hooks", () => {
   });
 });
 
+describe("read-only shell for the reviewer", () => {
+  it("lets the reviewer look but not write files or run other programs", () => {
+    const dir = makeProject();
+    const reviewerRuns = (command: string) => permissionDecision(hook(dir, "pre-tool-use", bashCall(command, "aw:reviewer")));
+
+    const reading = ["git diff HEAD~1", 'grep -rn "a > b" src', "find src -name '*.ts' 2>/dev/null | head -5", "ls -la", "cat src/app.ts 2>&1"];
+    for (const command of reading) expect(reviewerRuns(command)).toBeNull();
+    const writing = [
+      "find . -delete",
+      "find . -name x -exec rm {} \\;",
+      "git diff --output=patch.txt",
+      "cat src/a.ts > src/b.ts",
+      'grep "$(rm -rf src)" a.ts',
+      "tree -o listing.txt",
+      "rg --pre ./x.sh foo",
+      "echo hi >> notes.md",
+    ];
+    for (const command of writing) expect(reviewerRuns(command)).toBe("deny");
+  });
+});
+
 describe("product owner guards", () => {
   /** The PreToolUse verdict for a Bash call by the product owner. */
   const productOwnerRuns = (dir: string, command: string) => permissionDecision(hook(dir, "pre-tool-use", bashCall(command, PRODUCT_OWNER_AGENT)));
@@ -198,7 +219,7 @@ describe("product owner guards", () => {
     }
   });
 
-  it("lets the product owner run only `aw refine submit` and `aw schema refine`", () => {
+  it("lets the product owner run only `aw refine submit`, `aw schema refine` and read-only searches", () => {
     const dir = makeProject();
     toWorkingRefinement(dir);
 
@@ -208,10 +229,12 @@ describe("product owner guards", () => {
       'node "C:/plugins/aw/cli/aw.mjs" refine submit 2>&1',
       "node 'C:/plugins/aw/cli/aw.mjs' schema refine",
       "C:/plugins/aw/bin/aw.cmd refine submit",
+      'grep -rn "User" src',
+      'find src -name "*.ts" 2>/dev/null | head -20',
+      "ls docs/product",
     ];
     for (const command of allowed) expect(productOwnerRuns(dir, command)).toBeNull();
     const notAllowed = [
-      "ls",
       `aw refine approve ${SLICE}`,
       "npm test",
       'python -c "aw refine submit"',
@@ -219,6 +242,11 @@ describe("product owner guards", () => {
       "aw refine submit --force",
       "node evil.mjs refine submit",
       "aw refine submit && rm -rf src",
+      "find . -delete",
+      "find . -name x -exec rm {} \\;",
+      "grep -rn User src > users.txt",
+      "grep x $(rm -rf src)",
+      "cat src/app.ts",
     ];
     for (const command of notAllowed) expect(productOwnerRuns(dir, command)).toBe("deny");
   });

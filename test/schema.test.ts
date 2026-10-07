@@ -45,6 +45,15 @@ describe("schemas", () => {
 describe("aw init", () => {
   const git = (dir: string, ...args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
 
+  it("prints help for --help instead of running, here and for any command", () => {
+    const dir = tmpDir();
+
+    expect(expectOk(cli(dir, ["init", "--help"])).out).toContain("aw init [--force] [--language <lang>] [--shared]");
+    expect(fs.existsSync(path.join(dir, ".claude", "aw.config.json"))).toBe(false);
+    expect(expectOk(cli(dir, ["sm", "-h"])).out).toContain("aw sm <command>");
+    expect(expectOk(cli(dir, ["refine", "approve", "--help"])).out).toContain("aw refine <command>");
+  });
+
   it("local mode (default) hides everything from git without touching .gitignore; --shared switches", () => {
     const dir = tmpDir();
     git(dir, "init", "-q");

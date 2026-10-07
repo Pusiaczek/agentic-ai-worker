@@ -6,6 +6,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { type Ctx, loadCtx, rel } from "../core/project";
+import { contextDocFiles, plannedWork } from "../core/refinementContext";
 import {
   abandonActiveRun,
   activeRefinementRun,
@@ -54,7 +55,7 @@ import { parseInput, readInputJson } from "./shared";
 
 export const PRODUCT_OWNER_AGENT = "aw:product-owner";
 
-const USAGE = `aw refine <command>
+export const USAGE = `aw refine <command>
   new --title "<t>" [--id <id>] [--input <file>]   start a refinement; the slice text goes to input.md
   next [<id>]                      what to do now
   start-agent <id>                 start the product owner's run; prints the agent to spawn
@@ -159,6 +160,14 @@ function refineStartAgent(ctx: Ctx, args: Args, io: Io): number {
       `Wait for it to finish, or discard its run with \`aw refine reset ${working.ref.id}\`.`,
     );
   }
+  const documentation = contextDocFiles(ctx);
+  if (!documentation.length) {
+    throw new AwError(
+      `refine.contextDocs (${ctx.config.refine.contextDocs.join(", ")}) matches no files; the product owner needs the project documentation.`,
+      EXIT.VALIDATION,
+      `\`aw refine next ${ref.id}\` says how to set it up.`,
+    );
+  }
   const paths = refinementPaths(ref);
   const { state, run } = mutateRefinement(ref, (s) => {
     requireStatus(s, [RefinementStatus.enum.DRAFT], RefineAction.enum["start-agent"]);
@@ -184,7 +193,7 @@ function refineStartAgent(ctx: Ctx, args: Args, io: Io): number {
 
   // A proposal left from the previous revision must not be submitted again by mistake; revisions/ keeps a copy.
   fs.rmSync(paths.proposal, { force: true });
-  writeFileAtomic(paths.briefing, renderRefinementBriefing(ctx, state, ref, run));
+  writeFileAtomic(paths.briefing, renderRefinementBriefing(ctx, state, ref, run, { documentation, work: plannedWork(ctx, ref.id) }));
 
   io.out(`Product-owner run ${run.id} started for refinement ${ref.id}.`);
   io.out(

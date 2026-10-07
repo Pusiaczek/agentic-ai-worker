@@ -291,8 +291,8 @@ var require_utils = __commonJS({
       }
       return output2;
     };
-    exports.basename = (path19, { windows } = {}) => {
-      const segs = path19.split(windows ? /[\\/]/ : "/");
+    exports.basename = (path20, { windows } = {}) => {
+      const segs = path20.split(windows ? /[\\/]/ : "/");
       const last = segs[segs.length - 1];
       if (last === "") {
         return segs[segs.length - 2];
@@ -2635,10 +2635,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path19) {
-  if (!path19)
+function getElementAtPath(obj, path20) {
+  if (!path20)
     return obj;
-  return path19.reduce((acc, key) => acc?.[key], obj);
+  return path20.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -2978,11 +2978,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path19, issues) {
+function prefixIssues(path20, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path19);
+    iss.path.unshift(path20);
     return iss;
   });
 }
@@ -3432,16 +3432,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path19 = []) => {
+  const processError = (error63, path20 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path19, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path20, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path19, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path20, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path19, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path20, ...issue2.path]);
       } else {
-        const fullpath = [...path19, ...issue2.path];
+        const fullpath = [...path20, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -3480,17 +3480,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path19 = []) => {
+  const processError = (error63, path20 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path19, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path20, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path19, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path20, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path19, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path20, ...issue2.path]);
       } else {
-        const fullpath = [...path19, ...issue2.path];
+        const fullpath = [...path20, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -3529,8 +3529,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path19 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path19) {
+  const path20 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path20) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -20632,13 +20632,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path19 = ref.slice(1).split("/").filter(Boolean);
-  if (path19.length === 0) {
+  const path20 = ref.slice(1).split("/").filter(Boolean);
+  if (path20.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path19[0] === defsKey) {
-    const key = path19[1] === void 0 ? void 0 : decodeJSONPointerSegment(path19[1]);
+  if (path20[0] === defsKey) {
+    const key = path20[1] === void 0 ? void 0 : decodeJSONPointerSegment(path20[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -21674,7 +21674,10 @@ var Config = external_exports.object({
   }).strict().prefault({}),
   refine: external_exports.object({
     maxCriteriaPerItem: external_exports.number().int().positive().default(8).describe("Most acceptance criteria one item of a refinement may have; a bigger item must be split."),
-    maxItems: external_exports.number().int().positive().default(15).describe("Most items one refinement may have; a bigger slice must be split.")
+    maxItems: external_exports.number().int().positive().default(15).describe("Most items one refinement may have; a bigger slice must be split."),
+    contextDocs: external_exports.array(external_exports.string().min(1)).default(["docs/product/**/*.md"]).describe(
+      "Globs of the project documentation the product owner reads in full before every split: product overview, domains, the list of planned slices."
+    )
   }).strict().prefault({}),
   agents: external_exports.object({
     coder: agentPolicy("always", ["*"]),
@@ -21757,6 +21760,21 @@ function relativeToRoot(root, file2, cwd = root) {
 }
 function readTextIfExists(file2) {
   return fs.existsSync(file2) ? fs.readFileSync(file2, "utf8") : null;
+}
+function listFiles(root, limit = 2e4) {
+  const out = [];
+  const skip = /* @__PURE__ */ new Set(["node_modules", ".git", "dist", "build", "coverage", ".next", ".turbo"]);
+  const walk = (dir, prefix) => {
+    if (out.length >= limit) return;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (out.length >= limit) return;
+      if (e.isDirectory()) {
+        if (!skip.has(e.name)) walk(path.join(dir, e.name), `${prefix}${e.name}/`);
+      } else out.push(`${prefix}${e.name}`);
+    }
+  };
+  walk(root, "");
+  return out;
 }
 function slugify2(text, max = 40) {
   const slug = text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -22539,6 +22557,21 @@ function requireActiveTask(ctx) {
 function parseStateText(text, label) {
   return parseSealedText(TaskState, STATE_FILE, text, label);
 }
+function readArchivedTasks(ctx) {
+  const directories = fs5.existsSync(ctx.archiveDir) ? fs5.readdirSync(ctx.archiveDir).sort() : [];
+  const tasks = [];
+  const unreadable = [];
+  for (const directory of directories) {
+    const text = readTextIfExists(path4.join(ctx.archiveDir, directory, STATE_FILE));
+    if (!text) continue;
+    try {
+      tasks.push(parseStateText(text, directory));
+    } catch {
+      unreadable.push(directory);
+    }
+  }
+  return { tasks, unreadable };
+}
 function readState(ref, opts = {}) {
   return readSealed(sealedState(ref), opts);
 }
@@ -22826,6 +22859,35 @@ function isAwAgent(who) {
   return isTaskRole(who) || isProductOwner(who);
 }
 
+// src/hooks/readOnly.ts
+var withSingleSpaces = (segment) => segment.replace(/\s+/g, " ").trim();
+var WRITING_OR_RUNNING_OPTIONS = /* @__PURE__ */ new Map([
+  ["find", /^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/],
+  // Native Claude Code builds run ugrep as `grep`: --filter and --pre run commands, --save-config writes a file.
+  ["grep", /^--(filter|pre|save-config)(=|$)/],
+  ["rg", /^--pre(=|$)/],
+  ["tree", /^-o$/],
+  ["git", /^--output(=|$)/]
+]);
+var HARMLESS_REDIRECTS = / 2>&1| 2>\/dev\/null/g;
+function runsNestedCommand(segment) {
+  const withoutSingleQuoted = segment.replace(/'[^']*'/g, "''");
+  return /`|\$\(|<\(|>\(/.test(withoutSingleQuoted);
+}
+function redirectsOutput(segment) {
+  const withoutQuoted = segment.replace(/'[^']*'|"[^"]*"/g, '""').replace(HARMLESS_REDIRECTS, "");
+  return withoutQuoted.includes(">");
+}
+function usesWritingOption(segment) {
+  const [programPath = "", ...args] = withSingleSpaces(segment).split(" ");
+  const program = programPath.split(/[\\/]/).pop() ?? "";
+  const writingOption = WRITING_OR_RUNNING_OPTIONS.get(program);
+  return writingOption !== void 0 && args.some((arg) => writingOption.test(arg));
+}
+function isReadOnlyCommand(segment) {
+  return !runsNestedCommand(segment) && !redirectsOutput(segment) && !usesWritingOption(segment);
+}
+
 // src/hooks/shell.ts
 function splitSegments(command) {
   const segments = [];
@@ -22996,13 +23058,17 @@ var PRODUCT_OWNER_SUBCOMMAND = anyOf(
 );
 var OPTIONAL_ERRORS_TO_OUTPUT = /(?: 2>&1)?/;
 var PRODUCT_OWNER_COMMAND = wholeText(AW_LAUNCHER, / /, PRODUCT_OWNER_SUBCOMMAND, OPTIONAL_ERRORS_TO_OUTPUT);
-var withSingleSpaces = (segment) => segment.replace(/\s+/g, " ").trim();
+var READ_ONLY_SEARCH_COMMANDS = ["grep", "find", "ls", "head", "tail", "wc"];
+function isReadOnlySearch(segment) {
+  const commandWord2 = withSingleSpaces(segment).split(" ")[0] ?? "";
+  return READ_ONLY_SEARCH_COMMANDS.includes(commandWord2) && isReadOnlyCommand(segment);
+}
 function checkProductOwnerShell(command) {
-  const isAllowed = (segment) => PRODUCT_OWNER_COMMAND.test(withSingleSpaces(segment));
+  const isAllowed = (segment) => PRODUCT_OWNER_COMMAND.test(withSingleSpaces(segment)) || isReadOnlySearch(segment);
   const blocked = splitSegments(command).find((segment) => !isAllowed(segment));
   if (blocked === void 0) return null;
   return deny(
-    `the product owner runs only "aw refine submit" and "aw schema refine" ("${firstWords(blocked)}" is not allowed). Read the repository with Read, Grep and Glob; write only your proposal file.`
+    `the product owner runs only "aw refine submit", "aw schema refine" and read-only searches (${READ_ONLY_SEARCH_COMMANDS.join(", ")}; no "> file", no $(\u2026), no find -exec/-delete). "${firstWords(blocked)}" is not allowed. Write only your proposal file.`
   );
 }
 function checkShell(ctx, who, command) {
@@ -23021,6 +23087,14 @@ function checkShell(ctx, who, command) {
   const deniedPrefix = ctx.config.guards.bashDeny.find((prefix) => segments.some((segment) => startsWithCommand(segment, prefix)));
   if (deniedPrefix) {
     return deny(`"${deniedPrefix}" is not allowed for aw agents (guards.bashDeny). The user handles git history and publishing.`);
+  }
+  if (who.role === Role.enum.reviewer) {
+    const writing = segments.find((segment) => !isReadOnlyCommand(segment));
+    if (writing) {
+      return deny(
+        `the reviewer is read-only: "${firstWords(writing)}" would write a file or run another program (no "> file", no $(\u2026), no find -exec/-delete, no git --output). Report what you found instead.`
+      );
+    }
   }
   const policy = ctx.config.agents[who.role].bashAllow;
   if (policy.includes("*")) return null;
@@ -23756,6 +23830,30 @@ function mustAddress(s, run2, h, out) {
   for (const n of notes) out.push(`- ${n.id} (${n.source}): ${n.text}`);
 }
 
+// src/core/refinementContext.ts
+function contextDocFiles(ctx) {
+  const isContextDoc = globMatcher(ctx.config.refine.contextDocs);
+  return listFiles(ctx.root).filter(isContextDoc).sort();
+}
+function readOrNull(read) {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
+}
+function plannedWork(ctx, currentId) {
+  const refinements = [];
+  for (const ref of listRefinements(ctx)) {
+    if (ref.id === currentId) continue;
+    const state = readOrNull(() => readRefinement(ref));
+    if (state && state.status !== RefinementStatus.enum.CANCELLED) refinements.push({ ref, state });
+  }
+  const activeRef = readOrNull(() => findActiveTask(ctx));
+  const activeTask = activeRef ? readOrNull(() => readState(activeRef)) : null;
+  return { refinements, activeTask, archivedTasks: readArchivedTasks(ctx).tasks };
+}
+
 // src/schema/examples.ts
 var EXAMPLES = {
   plan: {
@@ -24084,17 +24182,8 @@ function backlogCommand(argv, io) {
 }
 function statsCommand(_argv, io) {
   const ctx = loadCtx(io.cwd);
-  const dirs = fs9.existsSync(ctx.archiveDir) ? fs9.readdirSync(ctx.archiveDir) : [];
-  const tasks = [];
-  for (const d of dirs) {
-    const text = readTextIfExists(path10.join(ctx.archiveDir, d, STATE_FILE));
-    if (!text) continue;
-    try {
-      tasks.push(parseStateText(text, d));
-    } catch {
-      io.err(`skipping ${d}: unreadable state`);
-    }
-  }
+  const { tasks, unreadable } = readArchivedTasks(ctx);
+  for (const directory of unreadable) io.err(`skipping ${directory}: unreadable state`);
   if (!tasks.length) {
     io.out("No archived tasks yet.");
     return EXIT.OK;
@@ -24141,21 +24230,6 @@ ${blocks.slice(-10).map((b) => `  - ${b}`).join("\n")}`);
 Recent process notes:
 ${notes.slice(-15).map((n) => `  - ${n}`).join("\n")}`);
   return EXIT.OK;
-}
-function listFiles(root, limit = 2e4) {
-  const out = [];
-  const skip = /* @__PURE__ */ new Set(["node_modules", ".git", "dist", "build", "coverage", ".next", ".turbo"]);
-  const walk = (dir, prefix) => {
-    if (out.length >= limit) return;
-    for (const e of fs9.readdirSync(dir, { withFileTypes: true })) {
-      if (out.length >= limit) return;
-      if (e.isDirectory()) {
-        if (!skip.has(e.name)) walk(path10.join(dir, e.name), `${prefix}${e.name}/`);
-      } else out.push(`${prefix}${e.name}`);
-    }
-  };
-  walk(root, "");
-  return out;
 }
 function scriptOf(command) {
   const m = /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?([\w:.-]+)/.exec(command.trim());
@@ -24210,6 +24284,9 @@ function doctorCommand(_argv, io) {
     else ok(`docs: ${d.path}`);
   }
   if (!ctx.config.docs.length) warn("docs index is empty \u2014 the docs check will have nothing to compare against");
+  const contextDocs = contextDocFiles(ctx);
+  if (contextDocs.length) ok(`refine.contextDocs: ${contextDocs.length} file(s) the product owner reads before splitting`);
+  else warn(`refine.contextDocs (${ctx.config.refine.contextDocs.join(", ")}) matches no files \u2014 /aw:refine will ask for the project documentation`);
   for (const name of [...Role.options, "scrum-master", "product-owner"]) {
     const file2 = path10.join(ctx.roleNotesDir, `${name}.md`);
     if (!fs9.existsSync(file2)) warn(`role notes missing: ${rel(ctx, file2)}`);
@@ -24398,12 +24475,13 @@ function initCommand(argv, io) {
 
 // src/commands/refine.ts
 import * as fs13 from "node:fs";
-import * as path15 from "node:path";
+import * as path16 from "node:path";
 
 // src/core/refinementNext.ts
-import * as path12 from "node:path";
+import * as path13 from "node:path";
 
 // src/core/refinementRender.ts
+import * as path12 from "node:path";
 var listOrNone = (values) => values.length ? values.join(", ") : "none";
 function itemsTable(revision) {
   return [
@@ -24458,7 +24536,43 @@ function renderProposal(s, revision) {
   return `${out.join("\n")}
 `;
 }
-function renderRefinementBriefing(ctx, s, ref, run2) {
+function refinementProgress(s) {
+  switch (s.status) {
+    case RefinementStatus.enum.APPROVED:
+      return "approved; its items are tasks to deliver";
+    case RefinementStatus.enum.PROPOSED:
+      return "proposed, waiting for the user's approval";
+    case RefinementStatus.enum.WORKING:
+      return "being split right now";
+    default:
+      return s.revisions.length ? "being revised" : "not split yet";
+  }
+}
+function shownRevision(s) {
+  if (s.status === RefinementStatus.enum.APPROVED) return s.revisions.find((revision) => revision.revision === s.approvedRevision);
+  return s.revisions.at(-1);
+}
+function plannedWorkSection(ctx, work) {
+  const out = [
+    "",
+    "## Work already planned or done",
+    "Don't plan it again. Build on it, and keep this slice's items from overlapping it.",
+    ""
+  ];
+  for (const { ref, state } of work.refinements) {
+    out.push(`- Refinement ${state.id} \xB7 ${state.title} \xB7 ${refinementProgress(state)}`);
+    const approved = state.status === RefinementStatus.enum.APPROVED;
+    for (const item of shownRevision(state)?.items ?? []) {
+      const file2 = rel(ctx, path12.join(refinementPaths(ref).items, itemFileName(item)));
+      out.push(`  - ${item.id} ${item.title}${approved ? ` (${file2})` : ""}`);
+    }
+  }
+  if (work.activeTask) out.push(`- Task ${work.activeTask.id} \xB7 ${work.activeTask.title} \xB7 ${work.activeTask.status} (in progress)`);
+  for (const task of work.archivedTasks) out.push(`- Task ${task.id} \xB7 ${task.title} \xB7 ${task.status} (archived)`);
+  if (out.length === 4) out.push("Nothing yet: this is the first slice.");
+  return out;
+}
+function renderRefinementBriefing(ctx, s, ref, run2, context) {
   const paths = refinementPaths(ref);
   const previous = s.revisions.at(-1);
   const out = [
@@ -24470,11 +24584,12 @@ function renderRefinementBriefing(ctx, s, ref, run2) {
     "## Your job",
     "Split the slice described in the input file into small, vertical, independently deliverable tasks. Each task will later go through the aw pipeline on its own, planned in detail by the scrum-master.",
     "",
-    `1. Read the slice: ${rel(ctx, paths.input)}`,
-    "2. Explore what you need in the repository with Read, Grep and Glob: the documentation index below, the modules the slice touches, the test layout.",
-    `3. Write your proposal as JSON to ${rel(ctx, paths.proposal)} with the Write tool. It is the only file you may write.`,
-    "4. Run `aw refine submit`. If it reports errors, fix the file and run it again.",
-    `5. Reply with ONE line, e.g. "product-owner ${run2.id}: proposed 4 items".`,
+    '1. Read ALL the files under "Project documentation" below: the product, its domains, the planned slices.',
+    `2. Read the slice: ${rel(ctx, paths.input)}`,
+    "3. Explore what you need in the repository with Read, Grep and Glob: the modules the slice touches, the test layout.",
+    `4. Write your proposal as JSON to ${rel(ctx, paths.proposal)} with the Write tool. It is the only file you may write.`,
+    "5. Run `aw refine submit`. If it reports errors, fix the file and run it again.",
+    `6. Reply with ONE line, e.g. "product-owner ${run2.id}: proposed 4 items".`,
     "",
     "## Limits",
     `- At most ${ctx.config.refine.maxCriteriaPerItem} acceptance criteria per item: split bigger items.`,
@@ -24493,8 +24608,14 @@ function renderRefinementBriefing(ctx, s, ref, run2) {
       `Full text: ${rel(ctx, paths.proposalView)}. Keep the items the notes don't touch unchanged: same titles and order.`
     );
   }
+  out.push(
+    "",
+    "## Project documentation (read all of it before splitting)",
+    ...context.documentation.map((file2) => `- ${file2}`),
+    ...plannedWorkSection(ctx, context.work)
+  );
   if (ctx.config.docs.length) {
-    out.push("", "## Documentation index", ...ctx.config.docs.map((doc) => `- ${doc.path} \u2014 ${doc.when}`));
+    out.push("", "## Other documentation (read when relevant)", ...ctx.config.docs.map((doc) => `- ${doc.path} \u2014 ${doc.when}`));
   }
   out.push("", "Project instructions (CLAUDE.md) are already in your context.");
   const repositoryNotes = readRoleNotes(ctx, "product-owner");
@@ -24578,6 +24699,18 @@ function chooseAction(inProgress) {
     ]
   };
 }
+function setContextAction(ctx, s) {
+  return {
+    kind: "set-context",
+    lines: [
+      `The product owner reads the project documentation in full before every split, but refine.contextDocs (${ctx.config.refine.contextDocs.join(", ")}) matches no files.`,
+      "Ask the user where it is: a directory holding only the documents the product owner should read (product overview, domains, the list of planned slices).",
+      "Then either move the documents there, or set refine.contextDocs in .claude/aw.config.json to globs that match them.",
+      "If the project has no such documentation yet, write a short product overview with the user first: purpose, users, domain terms, planned slices.",
+      `Then run \`aw refine next ${s.id}\`.`
+    ]
+  };
+}
 function refinementNextAction(ctx, ref, s) {
   const paths = refinementPaths(ref);
   switch (s.status) {
@@ -24591,6 +24724,7 @@ function refinementNextAction(ctx, ref, s) {
           ]
         };
       }
+      if (!contextDocFiles(ctx).length) return setContextAction(ctx, s);
       const notes = pendingRefinementNotes(s);
       return {
         kind: "spawn-po",
@@ -24629,7 +24763,7 @@ function refinementNextAction(ctx, ref, s) {
         kind: "done",
         lines: [
           `Approved revision ${s.approvedRevision}. Task files, in delivery order (start each with /aw:scrum-master <file>):`,
-          ...(revision?.items ?? []).map((item) => `- ${rel(ctx, path12.join(paths.items, itemFileName(item)))}`)
+          ...(revision?.items ?? []).map((item) => `- ${rel(ctx, path13.join(paths.items, itemFileName(item)))}`)
         ]
       };
     }
@@ -24644,7 +24778,7 @@ function formatRefinementNext(s, action) {
 
 // src/core/validate.ts
 import * as fs11 from "node:fs";
-import * as path13 from "node:path";
+import * as path14 from "node:path";
 function normalizePath(ctx, p, where, errors) {
   const relPath = relativeToRoot(ctx.root, p);
   if (relPath === null) {
@@ -24653,7 +24787,7 @@ function normalizePath(ctx, p, where, errors) {
   }
   return relPath;
 }
-var exists = (ctx, relPath) => fs11.existsSync(path13.join(ctx.root, relPath));
+var exists = (ctx, relPath) => fs11.existsSync(path14.join(ctx.root, relPath));
 function checkAcRefs(s, refs, errors) {
   const known = new Set(acIds(s));
   for (const r of refs) if (!known.has(r.ac)) errors.push(`${r.where}: unknown acceptance criterion ${r.ac} (known: ${[...known].join(", ")})`);
@@ -24759,7 +24893,7 @@ function checkCoder(ctx, s, run2, out) {
     if (!testIds.has(d.testId)) errors.push(`testDisputes: ${d.testId} is not one of the protected tests`);
   }
   for (const p of s.protectedFiles) {
-    if (fileSha256(path13.join(ctx.root, p.path)) !== p.sha256) {
+    if (fileSha256(path14.join(ctx.root, p.path)) !== p.sha256) {
       errors.push(
         `protected test file was modified: ${p.path} \u2014 restore the original from ${p.snapshot}. If you believe the test is wrong, report it in testDisputes instead of changing it.`
       );
@@ -24850,9 +24984,9 @@ function checkRefineOutput(limits, out, assignedNotes) {
 // src/commands/shared.ts
 import { spawnSync as spawnSync3 } from "node:child_process";
 import * as fs12 from "node:fs";
-import * as path14 from "node:path";
+import * as path15 from "node:path";
 function readInputJson(io, file2) {
-  const abs = path14.resolve(io.cwd, file2);
+  const abs = path15.resolve(io.cwd, file2);
   if (!fs12.existsSync(abs)) throw new AwError(`File not found: ${file2}`, EXIT.USAGE);
   try {
     return JSON.parse(fs12.readFileSync(abs, "utf8"));
@@ -24935,7 +25069,7 @@ function refineNew(ctx, args, io) {
   const inputFile = str(args, "input");
   let input2 = INPUT_PLACEHOLDER;
   if (inputFile) {
-    const abs = path15.resolve(io.cwd, inputFile);
+    const abs = path16.resolve(io.cwd, inputFile);
     if (!fs13.existsSync(abs)) throw new AwError(`Input file not found: ${inputFile}`, EXIT.USAGE);
     input2 = fs13.readFileSync(abs, "utf8");
   }
@@ -24989,6 +25123,14 @@ function refineStartAgent(ctx, args, io) {
       `Wait for it to finish, or discard its run with \`aw refine reset ${working.ref.id}\`.`
     );
   }
+  const documentation = contextDocFiles(ctx);
+  if (!documentation.length) {
+    throw new AwError(
+      `refine.contextDocs (${ctx.config.refine.contextDocs.join(", ")}) matches no files; the product owner needs the project documentation.`,
+      EXIT.VALIDATION,
+      `\`aw refine next ${ref.id}\` says how to set it up.`
+    );
+  }
   const paths = refinementPaths(ref);
   const { state, run: run2 } = mutateRefinement(ref, (s) => {
     requireStatus(s, [RefinementStatus.enum.DRAFT], RefineAction.enum["start-agent"]);
@@ -25012,7 +25154,7 @@ function refineStartAgent(ctx, args, io) {
     return { state: s, run: run3 };
   });
   fs13.rmSync(paths.proposal, { force: true });
-  writeFileAtomic(paths.briefing, renderRefinementBriefing(ctx, state, ref, run2));
+  writeFileAtomic(paths.briefing, renderRefinementBriefing(ctx, state, ref, run2, { documentation, work: plannedWork(ctx, ref.id) }));
   io.out(`Product-owner run ${run2.id} started for refinement ${ref.id}.`);
   io.out(
     [
@@ -25063,7 +25205,7 @@ ${errors.map((error62) => `  - ${error62}`).join("\n")}`,
     return { state: s, revision: revision2 };
   });
   ensureDir(paths.revisions);
-  fs13.copyFileSync(paths.proposal, path15.join(paths.revisions, `r${revision.revision}.json`));
+  fs13.copyFileSync(paths.proposal, path16.join(paths.revisions, `r${revision.revision}.json`));
   writeFileAtomic(paths.proposalView, renderProposal(state, revision));
   io.out(
     `Proposal accepted as revision ${revision.revision} of refinement ${ref.id}: ${revision.items.length} items. Reply with ONE line, e.g. "product-owner ${revision.runId}: proposed ${revision.items.length} items".`
@@ -25100,7 +25242,7 @@ function refineApprove(ctx, args, io) {
   ensureDir(paths.items);
   io.out(`Refinement ${ref.id} approved (revision ${revision.revision}). Task files, in delivery order:`);
   for (const item of revision.items) {
-    const file2 = path15.join(paths.items, itemFileName(item));
+    const file2 = path16.join(paths.items, itemFileName(item));
     writeFileAtomic(file2, renderItem(state, revision, item));
     io.out(`- ${rel(ctx, file2)}`);
   }
@@ -25165,7 +25307,7 @@ function refineShow(ctx, args, io) {
     io.out(`Revision ${shown.revision}${approved ? " (approved)" : ""}:`);
     for (const item of shown.items) {
       const dependencies = item.dependsOn.length ? `, depends on ${item.dependsOn.join(", ")}` : "";
-      const file2 = approved ? ` \u2192 ${rel(ctx, path15.join(paths.items, itemFileName(item)))}` : "";
+      const file2 = approved ? ` \u2192 ${rel(ctx, path16.join(paths.items, itemFileName(item)))}` : "";
       io.out(`- ${item.id} ${item.title} [${item.suggestedMode}, ${item.acceptanceCriteria.length} criteria${dependencies}]${file2}`);
     }
   }
@@ -25176,7 +25318,7 @@ function refineShow(ctx, args, io) {
 
 // src/commands/role.ts
 import * as fs14 from "node:fs";
-import * as path16 from "node:path";
+import * as path17 from "node:path";
 function roleCommand(role, argv, io) {
   const [word, ...rest] = argv;
   const action = RoleAction.safeParse(word);
@@ -25219,7 +25361,7 @@ function start(ctx, role, io) {
       iteration: submittedRuns(s2, role, step.target).length + 1,
       state: "active",
       startedAt: nowIso(),
-      outputFile: rel(ctx, path16.join(taskPaths(ref).out, `${id}-${role}.json`)),
+      outputFile: rel(ctx, path17.join(taskPaths(ref).out, `${id}-${role}.json`)),
       submitAttempts: [],
       testRuns: [],
       gates: [],
@@ -25250,7 +25392,7 @@ function precheck(ctx, ref, role) {
     }
     const errors = [];
     let output2;
-    const abs = path16.join(ctx.root, run2.outputFile);
+    const abs = path17.join(ctx.root, run2.outputFile);
     if (!fs14.existsSync(abs)) errors.push(`output file not found: ${run2.outputFile}`);
     else {
       let raw;
@@ -25300,9 +25442,9 @@ function snapshotProtected(ctx, ref, s) {
   const dir = taskPaths(ref).protected;
   fs14.rmSync(dir, { recursive: true, force: true });
   s.protectedFiles = files.map((f) => {
-    const abs = path16.join(ctx.root, f);
-    const snapshot = path16.join(dir, f);
-    ensureDir(path16.dirname(snapshot));
+    const abs = path17.join(ctx.root, f);
+    const snapshot = path17.join(dir, f);
+    ensureDir(path17.dirname(snapshot));
     fs14.copyFileSync(abs, snapshot);
     return { path: f, sha256: fileSha256(abs), snapshot: rel(ctx, snapshot) };
   });
@@ -25419,7 +25561,7 @@ function fail(ctx, role, reason, io) {
 
 // src/commands/sm.ts
 import * as fs15 from "node:fs";
-import * as path17 from "node:path";
+import * as path18 from "node:path";
 
 // src/core/render.ts
 function renderPlan(s, plan) {
@@ -25603,14 +25745,14 @@ function smNew(ctx, args, io) {
   const kind = str(args, "source") ?? (reqFile ? "file" : "manual");
   if (!["manual", "file", "jira"].includes(kind)) throw new AwError("--source must be manual, file or jira.", EXIT.USAGE);
   const sourceRef = str(args, "ref") ?? reqFile;
-  const ref = { id, dir: path17.join(ctx.activeDir, id) };
+  const ref = { id, dir: path18.join(ctx.activeDir, id) };
   if (fs15.existsSync(ref.dir)) throw new AwError(`${rel(ctx, ref.dir)} already exists.`);
   const p = taskPaths(ref);
   ensureDir(p.out);
   ensureDir(p.logs);
   let requirements = REQUIREMENTS_PLACEHOLDER;
   if (reqFile) {
-    const abs = path17.resolve(io.cwd, reqFile);
+    const abs = path18.resolve(io.cwd, reqFile);
     if (!fs15.existsSync(abs)) throw new AwError(`Requirements file not found: ${reqFile}`, EXIT.USAGE);
     requirements = fs15.readFileSync(abs, "utf8");
   }
@@ -25843,7 +25985,7 @@ function smReopen(ctx, args, io) {
 function archiveName(ctx, id) {
   const base = /^\d{4}-\d{2}-\d{2}/.test(id) ? id : `${today()}_${id}`;
   let name = base;
-  for (let i = 2; fs15.existsSync(path17.join(ctx.archiveDir, name)); i++) name = `${base}-${i}`;
+  for (let i = 2; fs15.existsSync(path18.join(ctx.archiveDir, name)); i++) name = `${base}-${i}`;
   return name;
 }
 function collectBacklog(s, retroImprovements) {
@@ -25879,7 +26021,7 @@ function smArchive(ctx, args, io) {
   }
   writeBacklog(ctx, backlog);
   ensureDir(ctx.archiveDir);
-  const dest = path17.join(ctx.archiveDir, archiveName(ctx, s.id));
+  const dest = path18.join(ctx.archiveDir, archiveName(ctx, s.id));
   fs15.renameSync(ref.dir, dest);
   io.out(`Archived ${s.id} \u2192 ${rel(ctx, dest)} (report.md inside).`);
   if (added.length) io.out(`${added.length} item(s) added to the backlog \u2014 \`aw backlog\`.`);
@@ -25898,7 +26040,7 @@ function smRepair(ctx, io) {
 }
 
 // src/commands/test.ts
-import * as path18 from "node:path";
+import * as path19 from "node:path";
 var USAGE3 = 'aw test [<test file>...] [-t "<test name pattern>"]';
 var TAIL_ON_PASS = 12;
 var TAIL_ON_FAIL = 60;
@@ -25920,9 +26062,9 @@ function testCommand(argv, io) {
   }
   const command = buildTestCommand(ctx.config, files, pattern);
   const run2 = state ? activeRun(state) : void 0;
-  const logsDir = ref ? taskPaths(ref).logs : path18.join(ctx.tasksDir, "logs");
+  const logsDir = ref ? taskPaths(ref).logs : path19.join(ctx.tasksDir, "logs");
   ensureDir(logsDir);
-  const res = execLogged(ctx, command, path18.join(logsDir, `${run2?.id ?? "task"}-test-${Date.now()}.log`));
+  const res = execLogged(ctx, command, path19.join(logsDir, `${run2?.id ?? "task"}-test-${Date.now()}.log`));
   if (ref && run2) {
     try {
       mutate(ref, (s) => {
@@ -25955,7 +26097,7 @@ function testCommand(argv, io) {
 }
 
 // src/main.ts
-var VERSION = "0.2.0";
+var VERSION = "0.2.2";
 var HELP = `aw ${VERSION} \u2014 task pipeline for Claude Code (scrum-master \xB7 tester \xB7 reviewer \xB7 coder)
 
 Orchestrator (main session):
@@ -25976,12 +26118,22 @@ Info:
   aw backlog [--all] [--kind <k>] | aw backlog set <B-id> <status> [--note "<n>"]
   aw stats | aw doctor
 Setup:
-  aw init [--force] [--language <lang>]`;
+  aw init [--force] [--language <lang>] [--shared]
+
+Any command with --help (or -h) prints help instead of running.`;
 var COMMAND_FLAGS = /* @__PURE__ */ new Map([
   ["--version", AwCommand.enum.version],
   ["--help", AwCommand.enum.help],
   ["-h", AwCommand.enum.help]
 ]);
+var COMMAND_USAGE = /* @__PURE__ */ new Map([
+  [AwCommand.enum.sm, USAGE2],
+  [AwCommand.enum.refine, USAGE],
+  [AwCommand.enum.test, USAGE3]
+]);
+function asksForHelp(args) {
+  return args.includes("--help") || args.includes("-h");
+}
 function commandWord(word) {
   if (word === void 0) return AwCommand.enum.help;
   return COMMAND_FLAGS.get(word) ?? word;
@@ -25991,6 +26143,10 @@ function run(argv, io) {
   try {
     const command = AwCommand.safeParse(commandWord(word));
     if (!command.success) throw new AwError(`Unknown command: ${word}`, EXIT.USAGE, "Run `aw help`.");
+    if (asksForHelp(rest)) {
+      io.out(COMMAND_USAGE.get(command.data) ?? HELP);
+      return EXIT.OK;
+    }
     switch (command.data) {
       case AwCommand.enum.sm:
         return smCommand(rest, io);

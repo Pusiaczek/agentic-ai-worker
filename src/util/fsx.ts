@@ -46,6 +46,23 @@ export function readTextIfExists(file: string): string | null {
   return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
 }
 
+/** Repository files as posix paths relative to `root`, skipping dependency, build and VCS directories. */
+export function listFiles(root: string, limit = 20_000): string[] {
+  const out: string[] = [];
+  const skip = new Set(["node_modules", ".git", "dist", "build", "coverage", ".next", ".turbo"]);
+  const walk = (dir: string, prefix: string) => {
+    if (out.length >= limit) return;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (out.length >= limit) return;
+      if (e.isDirectory()) {
+        if (!skip.has(e.name)) walk(path.join(dir, e.name), `${prefix}${e.name}/`);
+      } else out.push(`${prefix}${e.name}`);
+    }
+  };
+  walk(root, "");
+  return out;
+}
+
 export function slugify(text: string, max = 40): string {
   const slug = text
     .normalize("NFKD")

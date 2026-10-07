@@ -7,15 +7,19 @@ import {
   cli,
   expectOk,
   makeProject,
+  PRODUCT_DOC,
   PROPOSAL,
   type Proposal,
   REFINE_OUT,
   refinement,
   SLICE,
   sliceFile,
+  TASK,
   toProposedRefinement,
+  toReadyForTests,
   toWorkingRefinement,
   write,
+  writeProductDocs,
 } from "./helpers";
 
 const readText = (dir: string, file: string) => fs.readFileSync(path.join(dir, file), "utf8");
@@ -42,6 +46,7 @@ function latestRevision(dir: string): RefinementState["revisions"][number] {
 describe("aw refine: starting", () => {
   it("creates the refinement in .tasks/refinements/<id>, copies the slice text, and waits for the product owner", () => {
     const dir = makeProject();
+    writeProductDocs(dir);
     write(dir, "slice.md", "Users module.\n");
     const created = expectOk(cli(dir, ["refine", "new", "--title", "Users module", "--id", SLICE, "--input", "slice.md"]));
 
@@ -61,6 +66,60 @@ describe("aw refine: starting", () => {
     expect(next).toContain("first · DRAFT · First");
     expect(next).toContain("second · DRAFT · Second");
     expect(cli(dir, ["refine", "new", "--title", "Again", "--id", "first"]).code).toBe(EXIT.USAGE);
+  });
+});
+
+describe("aw refine: what the product owner knows besides the slice", () => {
+  it("asks for the project documentation before the product owner starts", () => {
+    const dir = makeProject();
+    write(dir, "slice.md", "Users module.\n");
+
+    const created = expectOk(cli(dir, ["refine", "new", "--title", "Users module", "--id", SLICE, "--input", "slice.md"]));
+    expect(created.out).toContain("NEXT: set-context");
+    const start = cli(dir, ["refine", "start-agent", SLICE]);
+    expect(start.code).toBe(EXIT.VALIDATION);
+    expect(start.err).toContain("refine.contextDocs (docs/product/**/*.md) matches no files");
+
+    writeProductDocs(dir);
+    expect(expectOk(cli(dir, ["refine", "next", SLICE])).out).toContain("NEXT: spawn-po");
+  });
+
+  it("lists all project documentation and the work already planned or done in the briefing", () => {
+    const dir = makeProject({ refine: { contextDocs: ["docs/product/**/*.md", "ROADMAP.md"] } });
+    write(dir, "docs/product/domains/billing.md", "# Billing\n");
+    write(dir, "ROADMAP.md", "1. Users\n2. Orders\n");
+    write(dir, "docs/architecture.md", "# Not for the product owner\n");
+    toProposedRefinement(dir);
+    expectOk(cli(dir, ["refine", "approve", SLICE]));
+    toReadyForTests(dir);
+    write(dir, "orders.md", "Orders.\n");
+    expectOk(cli(dir, ["refine", "new", "--title", "Orders", "--id", "orders", "--input", "orders.md"]));
+
+    expectOk(cli(dir, ["refine", "start-agent", "orders"]));
+
+    const briefing = readText(dir, ".tasks/refinements/orders/briefing.md");
+    expect(briefing).toContain(`- ROADMAP.md\n- docs/product/domains/billing.md\n- ${PRODUCT_DOC}\n`);
+    expect(briefing).not.toContain("docs/architecture.md");
+    expect(briefing).toContain(`- Refinement ${SLICE} · Users module · approved; its items are tasks to deliver`);
+    expect(briefing).toContain(`  - I-2 Create and read a user (${sliceFile("items/02-create-and-read-a-user.md")})`);
+    expect(briefing).toContain(`- Task ${TASK} · Limiter · READY_FOR_TESTS (in progress)`);
+  });
+
+  it("lists archived tasks with how they ended", () => {
+    const dir = makeProject();
+    toReadyForTests(dir);
+    expectOk(cli(dir, ["sm", "cancel", "--reason", "Not needed."]));
+    expectOk(cli(dir, ["sm", "archive"]));
+
+    toWorkingRefinement(dir);
+
+    expect(readText(dir, sliceFile("briefing.md"))).toContain(`- Task ${TASK} · Limiter · CANCELLED (archived)`);
+  });
+
+  it("tells the first slice that nothing was planned before it", () => {
+    const dir = makeProject();
+    toWorkingRefinement(dir);
+    expect(readText(dir, sliceFile("briefing.md"))).toContain("Nothing yet: this is the first slice.");
   });
 });
 

@@ -1,15 +1,15 @@
 import { hookCommand } from "./commands/hook";
 import { backlogCommand, doctorCommand, schemaCommand, showCommand, statsCommand } from "./commands/info";
 import { initCommand } from "./commands/init";
-import { refineCommand } from "./commands/refine";
+import { refineCommand, USAGE as REFINE_USAGE } from "./commands/refine";
 import { roleCommand } from "./commands/role";
-import { smCommand } from "./commands/sm";
-import { testCommand } from "./commands/test";
+import { smCommand, USAGE as SM_USAGE } from "./commands/sm";
+import { testCommand, USAGE as TEST_USAGE } from "./commands/test";
 import type { Io } from "./io";
 import { AwCommand } from "./schema/commands";
 import { AwError, EXIT } from "./util/errors";
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.2.2";
 
 const HELP = `aw ${VERSION} — task pipeline for Claude Code (scrum-master · tester · reviewer · coder)
 
@@ -31,7 +31,9 @@ Info:
   aw backlog [--all] [--kind <k>] | aw backlog set <B-id> <status> [--note "<n>"]
   aw stats | aw doctor
 Setup:
-  aw init [--force] [--language <lang>]`;
+  aw init [--force] [--language <lang>] [--shared]
+
+Any command with --help (or -h) prints help instead of running.`;
 
 /** Flags that work like commands: `aw --version`, `aw --help`, `aw -h`. */
 const COMMAND_FLAGS = new Map<string, AwCommand>([
@@ -39,6 +41,21 @@ const COMMAND_FLAGS = new Map<string, AwCommand>([
   ["--help", AwCommand.enum.help],
   ["-h", AwCommand.enum.help],
 ]);
+
+/** Commands with their own usage text; the others print the general help. */
+const COMMAND_USAGE = new Map<AwCommand, string>([
+  [AwCommand.enum.sm, SM_USAGE],
+  [AwCommand.enum.refine, REFINE_USAGE],
+  [AwCommand.enum.test, TEST_USAGE],
+]);
+
+/**
+ * `aw <command> … --help` (or -h): print help instead of running the command.
+ * Without this, `aw init --help` would write the config.
+ */
+function asksForHelp(args: string[]): boolean {
+  return args.includes("--help") || args.includes("-h");
+}
 
 /** The command word of `aw <word> …`; `aw` alone shows the help. */
 function commandWord(word: string | undefined): string {
@@ -51,6 +68,10 @@ export function run(argv: string[], io: Io): number {
   try {
     const command = AwCommand.safeParse(commandWord(word));
     if (!command.success) throw new AwError(`Unknown command: ${word}`, EXIT.USAGE, "Run `aw help`.");
+    if (asksForHelp(rest)) {
+      io.out(COMMAND_USAGE.get(command.data) ?? HELP);
+      return EXIT.OK;
+    }
     switch (command.data) {
       case AwCommand.enum.sm: return smCommand(rest, io);
       case AwCommand.enum.tester:

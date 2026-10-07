@@ -15,7 +15,7 @@ import { parseArgs, str } from "../util/args";
 import { AwError, EXIT } from "../util/errors";
 import { ensureDir, nowIso, relativeToRoot } from "../util/fsx";
 
-const USAGE = 'aw test [<test file>...] [-t "<test name pattern>"]';
+export const USAGE = 'aw test [<test file>...] [-t "<test name pattern>"]';
 const TAIL_ON_PASS = 12;
 const TAIL_ON_FAIL = 60;
 
