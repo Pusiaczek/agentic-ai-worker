@@ -59,7 +59,7 @@ describe("full tdd flow", () => {
     const coderBrief = expectOk(cli(dir, ["coder", "start"]));
     expect(coderBrief.out).toContain("T-1 [unit, edge; AC-1] tests/limit.test.js");
     write(dir, "src/impl.js", "module.exports = {};\n");
-    write(dir, outFile(dir), CODER_OUT);
+    write(dir, outFile(dir), { ...CODER_OUT, processNotes: ["npm ci warns about a postinstall script."] });
     expect(expectOk(cli(dir, ["coder", "submit"])).out).toContain("READY_FOR_CODE_REVIEW");
 
     // Reviewer requests changes with one major finding and one follow-up.
@@ -79,11 +79,16 @@ describe("full tdd flow", () => {
     expect(brief2.out).toContain("Must address");
     expect(brief2.out).toContain("F-1 [major/correctness] src/impl.js:1 (limit) — does nothing");
     expect(brief2.out).toContain("Line numbers are hints");
+    expect(brief2.out).toContain("## Process notes already recorded (don't repeat them in processNotes)\n- npm ci warns about a postinstall script.");
     write(dir, outFile(dir), CODER_OUT);
     const rejected = cli(dir, ["coder", "submit"]);
     expect(rejected.code).toBe(4);
     expect(rejected.err).toContain("addressedFindings: missing F-1");
-    write(dir, outFile(dir), { ...CODER_OUT, addressedFindings: [{ findingId: "F-1", resolution: "fixed", note: "implemented" }] });
+    write(dir, outFile(dir), {
+      ...CODER_OUT,
+      addressedFindings: [{ findingId: "F-1", resolution: "fixed", note: "implemented" }],
+      processNotes: ["NPM ci  warns about a postinstall script."], // the resumed coder copied its note again
+    });
     expectOk(cli(dir, ["coder", "submit"]));
 
     // Reviewer must give F-1 a status, then approves.
@@ -127,7 +132,9 @@ describe("full tdd flow", () => {
     expect(report).toContain("## Retro");
 
     const backlog = readJson<Backlog>(dir, ".tasks/backlog.json");
-    expect(backlog.items.map((item) => item.kind).sort()).toEqual(["followUp", "processImprovement", "processNote"]);
+    expect(backlog.items.map((item) => item.kind).sort()).toEqual(["followUp", "processImprovement", "processNote", "processNote"]);
+    const coderNotes = backlog.items.filter((item) => item.role === "coder");
+    expect(coderNotes.map((item) => [item.text, item.runId])).toEqual([["npm ci warns about a postinstall script.", "R-3"]]);
     expect(expectOk(cli(dir, ["stats"])).out).toContain("Archived tasks: 1 (done 1, cancelled 0)");
     expect(expectOk(cli(dir, ["show", "--task", TASK])).out).toContain("Status: DONE");
     expect(expectOk(cli(dir, ["sm", "next"])).out).toContain("NEXT: intake");

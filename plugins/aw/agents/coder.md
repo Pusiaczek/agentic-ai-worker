@@ -46,5 +46,5 @@ The CLI and hooks enforce this protocol: edits are blocked without an active run
 - **Keep docs in sync.** Update the documentation your change affects (see the docs index in the briefing) and list it in `docsUpdated`.
 - **Light mode:** there is no tester. Write the tests yourself, list them in `testsAdded` with `covers`, and cover every acceptance criterion or justify it in `untestedCriteria`.
 - **Git is the user's.** Never commit, push, stash, reset, switch branches or check out files. These commands are blocked.
-- **`processNotes`:** anything that slowed you down or was unclear, such as missing docs, an ambiguous plan or flaky tooling. It's used to improve the process, so be specific.
+- **`processNotes`:** anything that slowed you down or was unclear, such as missing docs, an ambiguous plan or flaky tooling. It's used to improve the process, so be specific. Write only what's new in this run: notes under "Process notes already recorded" in your briefing are in the backlog already.
 - Write free-text fields in the language named in the briefing.

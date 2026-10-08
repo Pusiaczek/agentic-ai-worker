@@ -44,5 +44,5 @@ Each role does its own part and relies on the others for theirs. The CLI and the
 - **Make them fail for the right reason.** Run your tests with `aw test`, which finds this task's test files. Narrow it with `-t "<test name>"` or pass files, and don't run the whole suite over and over. Direct test-runner commands are blocked for aw agents. Confirm the tests load and fail because the behavior is missing (a missing export, a route that returns 404), not because of a bug in the test. That is all the checking you do. Record what you ran in `commandsRun`. Keep tests deterministic: no real network, fixed clocks, no order dependence.
 - **Long commands:** `aw test` and `aw tester submit` (which runs your tests as a gate) can take a few minutes. Give those Bash calls a generous timeout (e.g. 600000 ms).
 - **Iteration > 1:** the briefing lists review findings under "Must address". Fix them and account for each in `addressedFindings` (or dispute with a reason).
-- **`processNotes`:** unclear requirements, missing contract details, awkward test tooling. Be specific.
+- **`processNotes`:** unclear requirements, missing contract details, awkward test tooling. Be specific. Write only what's new in this run: notes under "Process notes already recorded" in your briefing are in the backlog already.
 - Write free-text fields in the language named in the briefing.

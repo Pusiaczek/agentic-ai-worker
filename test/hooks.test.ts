@@ -183,7 +183,15 @@ describe("read-only shell for the reviewer", () => {
     const dir = makeProject();
     const reviewerRuns = (command: string) => permissionDecision(hook(dir, "pre-tool-use", bashCall(command, "aw:reviewer")));
 
-    const reading = ["git diff HEAD~1", 'grep -rn "a > b" src', "find src -name '*.ts' 2>/dev/null | head -5", "ls -la", "cat src/app.ts 2>&1"];
+    const reading = [
+      "git diff HEAD~1",
+      'grep -rn "a > b" src',
+      "find src -name '*.ts' 2>/dev/null | head -5",
+      "ls -la",
+      "cat src/app.ts 2>&1",
+      "git ls-remote --tags https://github.com/actions/checkout",
+      "npm view vitest versions",
+    ];
     for (const command of reading) expect(reviewerRuns(command)).toBeNull();
     const writing = [
       "find . -delete",
@@ -194,6 +202,10 @@ describe("read-only shell for the reviewer", () => {
       "tree -o listing.txt",
       "rg --pre ./x.sh foo",
       "echo hi >> notes.md",
+      "git ls-remote -u ./evil.sh origin",
+      "git ls-remote --upload-pack=./evil.sh origin",
+      "grep --pager=less x src",
+      'node -e "process.exit(0)" --fix', // the repository's lint command, told to fix files
     ];
     for (const command of writing) expect(reviewerRuns(command)).toBe("deny");
   });

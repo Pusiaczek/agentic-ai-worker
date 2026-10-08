@@ -8,15 +8,19 @@
 /** Collapses runs of whitespace to single spaces, so patterns can use plain spaces. */
 export const withSingleSpaces = (segment: string) => segment.replace(/\s+/g, " ").trim();
 
-/** Per program: options that write files or run other programs. */
+/** Per program (or program and subcommand): options that write files or run other programs. */
 const WRITING_OR_RUNNING_OPTIONS = new Map<string, RegExp>([
   ["find", /^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/],
-  // Native Claude Code builds run ugrep as `grep`: --filter and --pre run commands, --save-config writes a file.
-  ["grep", /^--(filter|pre|save-config)(=|$)/],
-  ["rg", /^--pre(=|$)/],
+  // Native Claude Code builds run ugrep as `grep`: --filter, --pre, --pager and --view run programs, --save-config writes a file.
+  ["grep", /^--(filter|pre|pager|view|save-config)(=|$)/],
+  ["rg", /^--(pre|hostname-bin)(=|$)/],
   ["tree", /^-o$/],
-  ["git", /^--output(=|$)/],
+  ["git", /^--(output|upload-pack)(=|$)/],
+  ["git ls-remote", /^-u$/],
 ]);
+
+/** Options that write files in any program that has them: linters and formatters fixing code in place. */
+const WRITING_OPTION_IN_ANY_PROGRAM = /^--(fix|write)(=|$)/;
 
 /** Redirections that write nothing: errors merged into the output, or thrown away. */
 const HARMLESS_REDIRECTS = / 2>&1| 2>\/dev\/null/g;
@@ -36,12 +40,19 @@ export function redirectsOutput(segment: string): boolean {
   return withoutQuoted.includes(">");
 }
 
-/** True when an option makes the program write or run something: `find -delete`, `git diff --output=x`, `tree -o x`. */
+/**
+ * True when an option makes the program write or run something:
+ * `find -delete`, `git diff --output=x`, `git ls-remote -u ./x.sh origin`, `npm run lint -- --fix`.
+ */
 export function usesWritingOption(segment: string): boolean {
   const [programPath = "", ...args] = withSingleSpaces(segment).split(" ");
   const program = programPath.split(/[\\/]/).pop() ?? "";
-  const writingOption = WRITING_OR_RUNNING_OPTIONS.get(program);
-  return writingOption !== undefined && args.some((arg) => writingOption.test(arg));
+  const writingOptions = [
+    WRITING_OPTION_IN_ANY_PROGRAM,
+    WRITING_OR_RUNNING_OPTIONS.get(program),
+    WRITING_OR_RUNNING_OPTIONS.get(`${program} ${args[0] ?? ""}`),
+  ];
+  return writingOptions.some((option) => option !== undefined && args.some((arg) => option.test(arg)));
 }
 
 /** One simple command that only reads. E.g. `grep -rn "a > b" src` is read-only; `find . -delete` is not. */

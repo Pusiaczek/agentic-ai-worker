@@ -9,7 +9,7 @@ import type { Io } from "./io";
 import { AwCommand } from "./schema/commands";
 import { AwError, EXIT } from "./util/errors";
 
-export const VERSION = "0.2.2";
+export const VERSION = "0.2.3";
 
 const HELP = `aw ${VERSION} — task pipeline for Claude Code (scrum-master · tester · reviewer · coder)
 

@@ -4,6 +4,7 @@ import type { Gate } from "../schema/config";
 import type { ReviewerRun, Run, StoredFinding, TaskState } from "../schema/state";
 import { Mode, ReviewTarget, Role } from "../schema/status";
 import { readTextIfExists } from "../util/fsx";
+import { withoutRepeats } from "../util/text";
 import { describeGate } from "./gates";
 import {
   currentPlan,
@@ -102,6 +103,7 @@ export function buildBriefing(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run): s
   if (run.role === Role.enum.reviewer) reviewerSection(ctx, s, run as ReviewerRun, h, out);
 
   mustAddress(s, run, h, out);
+  recordedProcessNotes(s, run, h, out);
   codeStandardsSection(ctx, h, out);
 
   const notes = readRoleNotes(ctx, run.role);
@@ -125,6 +127,18 @@ export function buildBriefing(ctx: Ctx, ref: TaskRef, s: TaskState, run: Run): s
 }
 
 type H = (title: string) => void;
+
+/**
+ * The role's process notes from its earlier runs in this task. They are recorded already; agents tend to
+ * repeat them in every iteration, verbatim or reworded, which only multiplies backlog items.
+ */
+function recordedProcessNotes(s: TaskState, run: Run, h: H, out: string[]): void {
+  const earlierRuns = submittedRuns(s, run.role).filter((other) => other.id !== run.id);
+  const notes = withoutRepeats(earlierRuns.flatMap((other) => other.output?.processNotes ?? []));
+  if (!notes.length) return;
+  h("Process notes already recorded (don't repeat them in processNotes)");
+  out.push(...notes.map((note) => `- ${note}`));
+}
 
 /**
  * What the agent still needs from plan.md. The tester's and coder's briefings already carry the criteria

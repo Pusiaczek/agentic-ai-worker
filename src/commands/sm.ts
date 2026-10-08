@@ -40,6 +40,7 @@ import {
 } from "../schema/state";
 import { Actor, Mode, Role, roleForStatus, Status, stepForWorking, TERMINAL } from "../schema/status";
 import { type Args, parseArgs, requireStr, str } from "../util/args";
+import { repeatKey } from "../util/text";
 import { AwError, EXIT } from "../util/errors";
 import { ensureDir, nowIso, readTextIfExists, slugify, today, writeFileAtomic } from "../util/fsx";
 import { gitInfo, list, parseInput, readInputJson } from "./shared";
@@ -382,11 +383,21 @@ function archiveName(ctx: Ctx, id: string): string {
   return name;
 }
 
+/**
+ * The task's backlog items: reviewer follow-ups, agents' process notes, retro improvements.
+ * A resumed agent often copies its earlier notes verbatim into each new output, so a text repeated
+ * within the task (case and whitespace aside) becomes one item, from the run that wrote it first.
+ */
 function collectBacklog(s: TaskState, retroImprovements: string[]): Omit<BacklogItem, "id">[] {
   const at = nowIso();
   const items: Omit<BacklogItem, "id">[] = [];
-  const add = (kind: BacklogItem["kind"], text: string, extra: Partial<BacklogItem> = {}) =>
+  const added = new Set<string>();
+  const add = (kind: BacklogItem["kind"], text: string, extra: Partial<BacklogItem> = {}) => {
+    const key = `${kind} ${repeatKey(text)}`;
+    if (added.has(key)) return;
+    added.add(key);
     items.push({ kind, text, taskId: s.id, createdAt: at, status: BacklogStatus.enum.open, ...extra });
+  };
   for (const r of s.runs) {
     if (!r.output) continue;
     if (r.role === Role.enum.reviewer) {

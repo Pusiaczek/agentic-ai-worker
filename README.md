@@ -164,7 +164,7 @@ Przy każdym przebiegu zapisana jest ścieżka do pełnego transkryptu agenta (`
 | Odpowiedź agenta do orkiestratora jest krótka | hook `SubagentStop` jednorazowo odrzuca odpowiedź dłuższą niż `limits.finalMessageMaxChars` |
 | Agenci nie ruszają historii gita | `guards.bashDeny` (push, commit, reset, checkout, stash…) |
 | Agenci aw nic nie zmieniają w repo bez aw | hook: w repo bez `.claude/aw.config.json` blokuje agentom `aw:*` edycje i komendy (poza samym `aw`); Ciebie i innych agentów nie dotyka |
-| Reviewer ma tylko komendy do odczytu | `agents.reviewer.bashAllow` (allowlista prefiksów plus komendy z configu); do tego hook odrzuca przekierowanie do pliku, zagnieżdżone komendy (`$(…)`) i opcje, które zapisują albo uruchamiają programy (`find -delete/-exec`, `git --output`, `tree -o`) |
+| Reviewer ma tylko komendy do odczytu | `agents.reviewer.bashAllow` (allowlista prefiksów plus komendy z configu); do tego hook odrzuca przekierowanie do pliku, zagnieżdżone komendy (`$(…)`) i opcje, które zapisują albo uruchamiają programy (`find -delete/-exec`, `git --output`, `git ls-remote --upload-pack`, `tree -o`, `--fix`/`--write` linterów i formaterów). Sprawdzenie wersji zależności i akcji: `npm view`, `git ls-remote` |
 
 Coder i tester mają domyślnie `bashAllow: ["*"]`, czyli wszystko poza deny-listą. Kod piszą przez Edit/Write, nie przez Bash, więc allowlista nie blokuje kodowania. Blokuje natomiast uruchamianie rzeczy spoza listy (np. `npm install`, pojedynczy test), dlatego domyślnie jest luźna.
 

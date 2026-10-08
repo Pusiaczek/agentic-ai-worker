@@ -21622,6 +21622,9 @@ var DEFAULT_REVIEWER_BASH = [
   "git status",
   "git blame",
   "git ls-files",
+  "git ls-remote",
+  "npm view",
+  "npm ls",
   "ls",
   "cat",
   "head",
@@ -22863,12 +22866,14 @@ function isAwAgent(who) {
 var withSingleSpaces = (segment) => segment.replace(/\s+/g, " ").trim();
 var WRITING_OR_RUNNING_OPTIONS = /* @__PURE__ */ new Map([
   ["find", /^-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)$/],
-  // Native Claude Code builds run ugrep as `grep`: --filter and --pre run commands, --save-config writes a file.
-  ["grep", /^--(filter|pre|save-config)(=|$)/],
-  ["rg", /^--pre(=|$)/],
+  // Native Claude Code builds run ugrep as `grep`: --filter, --pre, --pager and --view run programs, --save-config writes a file.
+  ["grep", /^--(filter|pre|pager|view|save-config)(=|$)/],
+  ["rg", /^--(pre|hostname-bin)(=|$)/],
   ["tree", /^-o$/],
-  ["git", /^--output(=|$)/]
+  ["git", /^--(output|upload-pack)(=|$)/],
+  ["git ls-remote", /^-u$/]
 ]);
+var WRITING_OPTION_IN_ANY_PROGRAM = /^--(fix|write)(=|$)/;
 var HARMLESS_REDIRECTS = / 2>&1| 2>\/dev\/null/g;
 function runsNestedCommand(segment) {
   const withoutSingleQuoted = segment.replace(/'[^']*'/g, "''");
@@ -22881,8 +22886,12 @@ function redirectsOutput(segment) {
 function usesWritingOption(segment) {
   const [programPath = "", ...args] = withSingleSpaces(segment).split(" ");
   const program = programPath.split(/[\\/]/).pop() ?? "";
-  const writingOption = WRITING_OR_RUNNING_OPTIONS.get(program);
-  return writingOption !== void 0 && args.some((arg) => writingOption.test(arg));
+  const writingOptions = [
+    WRITING_OPTION_IN_ANY_PROGRAM,
+    WRITING_OR_RUNNING_OPTIONS.get(program),
+    WRITING_OR_RUNNING_OPTIONS.get(`${program} ${args[0] ?? ""}`)
+  ];
+  return writingOptions.some((option) => option !== void 0 && args.some((arg) => option.test(arg)));
 }
 function isReadOnlyCommand(segment) {
   return !runsNestedCommand(segment) && !redirectsOutput(segment) && !usesWritingOption(segment);
@@ -23546,6 +23555,20 @@ import * as path10 from "node:path";
 // src/core/briefing.ts
 import * as path9 from "node:path";
 
+// src/util/text.ts
+function repeatKey(text) {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+function withoutRepeats(texts) {
+  const seen = /* @__PURE__ */ new Set();
+  return texts.filter((text) => {
+    const key = repeatKey(text);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // src/core/pluginFiles.ts
 import * as fs8 from "node:fs";
 import * as path8 from "node:path";
@@ -23636,6 +23659,7 @@ function buildBriefing(ctx, ref, s, run2) {
   if (run2.role === Role.enum.coder) coderSection(ctx, ref, s, run2, h, out);
   if (run2.role === Role.enum.reviewer) reviewerSection(ctx, s, run2, h, out);
   mustAddress(s, run2, h, out);
+  recordedProcessNotes(s, run2, h, out);
   codeStandardsSection(ctx, h, out);
   const notes = readRoleNotes(ctx, run2.role);
   if (notes) {
@@ -23652,6 +23676,13 @@ function buildBriefing(ctx, ref, s, run2) {
     `4. Final reply: ONE line, e.g. \`${run2.role} ${run2.id}: submitted \u2014 <\u226415 words>\`. Details belong in the JSON, not in the reply.`
   );
   return out.join("\n");
+}
+function recordedProcessNotes(s, run2, h, out) {
+  const earlierRuns = submittedRuns(s, run2.role).filter((other) => other.id !== run2.id);
+  const notes = withoutRepeats(earlierRuns.flatMap((other) => other.output?.processNotes ?? []));
+  if (!notes.length) return;
+  h("Process notes already recorded (don't repeat them in processNotes)");
+  out.push(...notes.map((note) => `- ${note}`));
 }
 function planReadingHint(role) {
   if (role === Role.enum.reviewer) return "the acceptance criteria are below; read the contract, out-of-scope items and risks there.";
@@ -25991,7 +26022,13 @@ function archiveName(ctx, id) {
 function collectBacklog(s, retroImprovements) {
   const at = nowIso();
   const items = [];
-  const add = (kind, text, extra = {}) => items.push({ kind, text, taskId: s.id, createdAt: at, status: BacklogStatus.enum.open, ...extra });
+  const added = /* @__PURE__ */ new Set();
+  const add = (kind, text, extra = {}) => {
+    const key = `${kind} ${repeatKey(text)}`;
+    if (added.has(key)) return;
+    added.add(key);
+    items.push({ kind, text, taskId: s.id, createdAt: at, status: BacklogStatus.enum.open, ...extra });
+  };
   for (const r of s.runs) {
     if (!r.output) continue;
     if (r.role === Role.enum.reviewer) {
@@ -26097,7 +26134,7 @@ function testCommand(argv, io) {
 }
 
 // src/main.ts
-var VERSION = "0.2.2";
+var VERSION = "0.2.3";
 var HELP = `aw ${VERSION} \u2014 task pipeline for Claude Code (scrum-master \xB7 tester \xB7 reviewer \xB7 coder)
 
 Orchestrator (main session):
@@ -26191,6 +26228,14 @@ function run(argv, io) {
 }
 
 // src/cli.ts
+function endQuietlyWhenReaderCloses(stream) {
+  stream.on("error", (error62) => {
+    if (error62.code === "EPIPE") process.exit(process.exitCode ?? 0);
+    throw error62;
+  });
+}
+endQuietlyWhenReaderCloses(process.stdout);
+endQuietlyWhenReaderCloses(process.stderr);
 var code = run(process.argv.slice(2), {
   cwd: process.cwd(),
   env: process.env,

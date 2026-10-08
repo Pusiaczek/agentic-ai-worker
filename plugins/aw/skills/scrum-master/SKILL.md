@@ -90,6 +90,7 @@ Or run `aw sm cancel --reason "<why>"`.
 
 ### archive
 Write a short retro JSON (`aw schema retro`): what went well, what went wrong, concrete process improvements, all based on the run history and the agents' `processNotes`. Then run `aw sm archive --retro <retro.json>`. Mention new backlog items (`aw backlog`).
+- The CLI merges notes repeated word for word. If two new items still say the same thing in other words, keep the clearer one and close the other: `aw backlog set <B-id> rejected --note "duplicate of <B-id>"`.
 
 ## Rules
 - Never write `state.json`; never run `aw tester|reviewer|coder …` yourself; never run `aw sm approve` or `aw sm accept` without the user's explicit OK in this conversation.
